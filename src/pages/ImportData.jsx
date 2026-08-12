@@ -40,7 +40,8 @@ export default function ImportData() {
           const lower = s.name.toLowerCase();
           if (lower.includes('attend')) autoMap[s.name] = 'Attendance';
           else if (lower.includes('expense')) autoMap[s.name] = 'Expenses';
-          else autoMap[s.name] = 'Students & Fees'; // Default to Students & Fees (All-in-One)
+          else if (lower.includes('student')) autoMap[s.name] = 'Students';
+          else autoMap[s.name] = 'Fee Records'; // Default to Fee Records Only
         });
         setMapping(autoMap);
         setStep(2);
@@ -325,13 +326,13 @@ export default function ImportData() {
                 <div className="sheet-rows text-muted text-sm">{s.rows} Rows</div>
                 <select
                   className="form-select"
-                  style={{ width: 220 }}
-                  value={mapping[s.name] || 'Students & Fees'}
+                  style={{ width: 250 }}
+                  value={mapping[s.name] || 'Fee Records'}
                   onChange={e => setMapping({ ...mapping, [s.name]: e.target.value })}
                 >
+                  <option value="Fee Records">💰 Fee Records Only (Target fee_payments Table Only)</option>
+                  <option value="Students">👨‍🎓 Students Only (Target students Table Only)</option>
                   <option value="Students & Fees">✨ Students & Fees (All-in-One)</option>
-                  <option value="Students">👨‍🎓 Students Only</option>
-                  <option value="Fee Records">💰 Fee Records Only</option>
                   <option value="Attendance">📋 Attendance Module</option>
                   <option value="Expenses">💸 Expenses Module</option>
                   <option value="Skip">❌ Skip Sheet</option>
