@@ -95,26 +95,11 @@ export default function Fees() {
     fetchData();
   }, []);
 
-  // Compute merged records list strictly filtered for current selected Month & Year
+  // Compute merged records list strictly filtered by all criteria (Search, Class, Month, Year, Status, Card)
   const displayedRecords = React.useMemo(() => {
     const selectedPeriod = `${filterMonth} ${filterYear}`;
     const targetMonth = filterMonth.trim().toLowerCase();
     const targetYear = filterYear.trim().toLowerCase();
-
-    const isClassMatch = (cls) => {
-      if (!filterClass) return true;
-      const c1 = (cls || '').trim().toLowerCase();
-      const c2 = filterClass.trim().toLowerCase();
-      return c1 === c2 || c1.includes(c2) || c2.includes(c1);
-    };
-
-    const isSearchMatch = (name, roll) => {
-      if (!search) return true;
-      const term = search.trim().toLowerCase();
-      const n = (name || '').trim().toLowerCase();
-      const r = (roll || '').trim().toLowerCase();
-      return n.includes(term) || r.includes(term);
-    };
 
     const getFeeForClass = (cls) => {
       const found = feeStructure.find(f => {
@@ -136,12 +121,8 @@ export default function Fees() {
     });
     const uniqueStudents = Array.from(uniqueStudentsMap.values());
 
-    const matchingStudents = uniqueStudents.filter(s =>
-      isClassMatch(s.class) && isSearchMatch(s.name, s.roll_number || s.rollNo)
-    );
-
-    // 2. Build records for selected Month & Year
-    let records = matchingStudents.map(s => {
+    // 2. Map all unique students to their transaction or pending record for selected Month & Year
+    let records = uniqueStudents.map(s => {
       const sName = (s.name || '').trim().toLowerCase();
       const sRoll = (s.roll_number || s.rollNo || '').trim().toLowerCase();
 
@@ -168,7 +149,7 @@ export default function Fees() {
           roll_number: s.roll_number || s.rollNo || '—',
           class: s.class || existingTx.class,
           month: existingTx.month || selectedPeriod,
-          amount: Number(existingTx.amount), // Exact amount from DB (e.g. 300 or 500)
+          amount: Number(existingTx.amount),
           status: existingTx.status || 'Paid',
           payment_method: existingTx.payment_method || 'Cash',
           card_issued: existingTx.card_issued || s.card_issued || 'No',
@@ -176,7 +157,6 @@ export default function Fees() {
         };
       }
 
-      // Default pending record for selected Month & Year
       return {
         id: `temp-${s.id}-${filterMonth}-${filterYear}`,
         student_id: s.id,
@@ -184,7 +164,7 @@ export default function Fees() {
         roll_number: s.roll_number || s.rollNo || '—',
         class: s.class,
         month: selectedPeriod,
-        amount: classDefaultFee, // Default 300 PKR
+        amount: classDefaultFee,
         status: 'Pending',
         payment_method: 'Cash',
         card_issued: s.card_issued || 'No',
@@ -192,45 +172,64 @@ export default function Fees() {
       };
     });
 
-    // 3. Include transactions from DB for selected Month & Year if student profile was not in students table
+    // 3. Include any fee_payments from DB for selected Month & Year if student profile was not in students table
     transactions.forEach(t => {
       const tMonth = (t.month || '').trim().toLowerCase();
       if (tMonth.includes(targetMonth) && tMonth.includes(targetYear)) {
-        if (isClassMatch(t.class) && isSearchMatch(t.student_name, t.roll_number)) {
-          const tName = (t.student_name || '').trim().toLowerCase();
-          const alreadyAdded = records.some(r => r.student_name.trim().toLowerCase() === tName);
-          if (!alreadyAdded) {
-            records.push({
-              id: t.id,
-              student_id: t.student_id || t.id,
-              student_name: t.student_name,
-              roll_number: t.roll_number || '—',
-              class: t.class || 'Muntazir (3-4)',
-              month: t.month,
-              amount: Number(t.amount),
-              status: t.status || 'Paid',
-              payment_method: t.payment_method || 'Cash',
-              card_issued: t.card_issued || 'No',
-              date: t.date || new Date().toISOString().split('T')[0],
-            });
-          }
+        const tName = (t.student_name || '').trim().toLowerCase();
+        const alreadyAdded = records.some(r => r.student_name.trim().toLowerCase() === tName);
+        if (!alreadyAdded) {
+          records.push({
+            id: t.id,
+            student_id: t.student_id || t.id,
+            student_name: t.student_name,
+            roll_number: t.roll_number || '—',
+            class: t.class || 'Muntazir (3-4)',
+            month: t.month,
+            amount: Number(t.amount),
+            status: t.status || 'Paid',
+            payment_method: t.payment_method || 'Cash',
+            card_issued: t.card_issued || 'No',
+            date: t.date || new Date().toISOString().split('T')[0],
+          });
         }
       }
     });
 
-    // 4. STRICT MONTH & YEAR FILTER: Remove any records that do NOT belong to selected Month & Year
+    // 4. APPLY ALL FILTERS STRICTLY AT THE END ON THE FINAL RECORD LIST:
+
+    // Filter A: Search by Name or Roll Number
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      records = records.filter(r => {
+        const n = (r.student_name || '').trim().toLowerCase();
+        const roll = (r.roll_number || '').trim().toLowerCase();
+        return n.includes(term) || roll.includes(term);
+      });
+    }
+
+    // Filter B: Filter by Class
+    if (filterClass && filterClass.trim()) {
+      const targetCls = filterClass.trim().toLowerCase();
+      records = records.filter(r => {
+        const rCls = (r.class || '').trim().toLowerCase();
+        return rCls === targetCls || rCls.includes(targetCls) || targetCls.includes(rCls);
+      });
+    }
+
+    // Filter C: Filter by Month & Year
     records = records.filter(r => {
       const rMonth = (r.month || '').toLowerCase();
       return rMonth.includes(targetMonth) && rMonth.includes(targetYear);
     });
 
-    // 5. STRICT STATUS FILTER: Filter by Status if selected (Paid, Pending, Overdue, Defaulter)
-    if (filterStatus) {
+    // Filter D: Filter by Status (Paid, Pending, Overdue, Defaulter)
+    if (filterStatus && filterStatus.trim()) {
       records = records.filter(r => r.status.trim().toLowerCase() === filterStatus.trim().toLowerCase());
     }
 
-    // 6. Filter by Card Issued if selected
-    if (filterCard) {
+    // Filter E: Filter by Card Issued
+    if (filterCard && filterCard.trim()) {
       records = records.filter(r => r.card_issued.trim().toLowerCase() === filterCard.trim().toLowerCase());
     }
 
