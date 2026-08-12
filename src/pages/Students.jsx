@@ -5,12 +5,12 @@ import { supabase } from '../supabase';
 const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
 const initStudents = [
-  { id:1, roll_number:'001', name:'Ahmed Ali Khan',    father_name:'Ali Khan',      class:'Muntaqim (5)', gender:'Male',   dob:'2014-03-12', guardian_name:'Ali Khan',     phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
-  { id:2, roll_number:'002', name:'Fatima Noor',        father_name:'Noor Ahmed',    class:'Qaim (7-8)', gender:'Female', dob:'2012-07-22', guardian_name:'Noor Ahmed',   phone:'0321-2345678', address:'Flat 3B, Block C, Karachi',  status:'Active' },
-  { id:3, roll_number:'003', name:'Usman Tariq',        father_name:'Tariq Mehmood', class:'Muntazir (3-4)', gender:'Male',   dob:'2016-01-05', guardian_name:'Tariq Mehmood',phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad',  status:'Active' },
+  { id:1, roll_number:'001', name:'Ahmed Ali Khan', father_name:'Ali Khan', class:'Muntaqim (5)', school_name:'Army Public School', dob:'2014-03-12', parent_phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
+  { id:2, roll_number:'002', name:'Fatima Noor', father_name:'Noor Ahmed', class:'Qaim (7-8)', school_name:'City Model School', dob:'2012-07-22', parent_phone:'0321-2345678', address:'Flat 3B, Block C, Karachi', status:'Active' },
+  { id:3, roll_number:'003', name:'Usman Tariq', father_name:'Tariq Mehmood', class:'Muntazir (3-4)', school_name:'Govt High School', dob:'2016-01-05', parent_phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad', status:'Active' },
 ];
 
-const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', gender:'Male', date_of_birth:'', guardian_name:'', guardian_phone:'', address:'', status:'Active' };
+const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', school_name:'', date_of_birth:'', parent_phone:'', address:'', status:'Active' };
 
 function Avatar({ name, size = 36 }) {
   const initials = (name || 'S').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -25,7 +25,6 @@ export default function Students() {
   const [search, setSearch] = useState('');
   const [filterClass, setFilterClass] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterGender, setFilterGender] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -59,8 +58,7 @@ export default function Students() {
     const matchSearch = sName.toLowerCase().includes(search.toLowerCase()) || sRoll.includes(search);
     const matchClass  = !filterClass  || s.class === filterClass;
     const matchStatus = !filterStatus || s.status === filterStatus;
-    const matchGender = !filterGender || s.gender === filterGender;
-    return matchSearch && matchClass && matchStatus && matchGender;
+    return matchSearch && matchClass && matchStatus;
   });
 
   const openAdd = () => { setForm(emptyForm); setEditStudent(null); setModalOpen(true); };
@@ -70,10 +68,9 @@ export default function Students() {
       name: s.name || '',
       father_name: s.father_name || s.fatherName || '',
       class: s.class || 'Muntazir (3-4)',
-      gender: s.gender || 'Male',
+      school_name: s.school_name || s.schoolName || '',
       date_of_birth: s.date_of_birth || s.dob || '',
-      guardian_name: s.guardian_name || s.guardian || '',
-      guardian_phone: s.guardian_phone || s.phone || '',
+      parent_phone: s.parent_phone || s.guardian_phone || s.phone || '',
       address: s.address || '',
       status: s.status || 'Active'
     });
@@ -121,8 +118,17 @@ export default function Students() {
   };
 
   const exportCSV = () => {
-    const headers = ['Roll No','Name','Father Name','Class','Gender','Guardian','Phone','Address','Status'];
-    const rows = students.map(s => [s.roll_number || s.rollNo, s.name, s.father_name || s.fatherName, s.class, s.gender, s.guardian_name || s.guardian, s.guardian_phone || s.phone, `"${s.address || ''}"`, s.status]);
+    const headers = ['Roll No','Name','Father Name','Class','School Name','Parent Phone No','Address','Status'];
+    const rows = students.map(s => [
+      s.roll_number || s.rollNo,
+      s.name,
+      s.father_name || s.fatherName,
+      s.class,
+      s.school_name || s.schoolName,
+      s.parent_phone || s.guardian_phone || s.phone,
+      `"${s.address || ''}"`,
+      s.status
+    ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'students.csv'; a.click();
@@ -155,10 +161,6 @@ export default function Students() {
             <option value="">All Status</option>
             <option>Active</option><option>Inactive</option>
           </select>
-          <select className="form-select" style={{ flex:'0 0 120px' }} value={filterGender} onChange={e=>setFilterGender(e.target.value)}>
-            <option value="">All Genders</option>
-            <option>Male</option><option>Female</option>
-          </select>
         </div>
       </div>
 
@@ -166,8 +168,8 @@ export default function Students() {
         <table className="table">
           <thead>
             <tr>
-              <th>Student</th><th>Roll No</th><th>Class</th><th>Gender</th>
-              <th>Guardian Phone</th><th>Status</th><th>Actions</th>
+              <th>Student</th><th>Roll No</th><th>Class</th><th>School Name</th>
+              <th>Parent Phone No</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -188,8 +190,8 @@ export default function Students() {
                 </td>
                 <td className="text-muted font-semibold">{s.roll_number || s.rollNo}</td>
                 <td><span className="badge badge-blue">{s.class}</span></td>
-                <td>{s.gender || 'Male'}</td>
-                <td>{s.guardian_phone || s.phone || '—'}</td>
+                <td>{s.school_name || s.schoolName || '—'}</td>
+                <td>{s.parent_phone || s.guardian_phone || s.phone || '—'}</td>
                 <td><span className={`badge ${s.status==='Active'?'badge-green':'badge-gray'}`}>{s.status || 'Active'}</span></td>
                 <td>
                   <div style={{ display:'flex', gap:6 }}>
@@ -226,17 +228,12 @@ export default function Students() {
                     {CLASSES.map(c=><option key={c}>{c}</option>)}
                   </select>
                 </div>
-                <div className="form-group"><label className="form-label">Gender</label>
-                  <select className="form-select" value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}>
-                    <option>Male</option><option>Female</option><option>Other</option>
-                  </select>
-                </div>
+                <div className="form-group"><label className="form-label">School Name</label><input className="form-input" placeholder="e.g. Govt High School" value={form.school_name} onChange={e=>setForm({...form,school_name:e.target.value})}/></div>
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Guardian Name</label><input className="form-input" placeholder="Guardian name" value={form.guardian_name} onChange={e=>setForm({...form,guardian_name:e.target.value})}/></div>
-                <div className="form-group"><label className="form-label">Guardian Phone</label><input className="form-input" placeholder="0300-1234567" value={form.guardian_phone} onChange={e=>setForm({...form,guardian_phone:e.target.value})}/></div>
+                <div className="form-group"><label className="form-label">Parent Phone No</label><input className="form-input" placeholder="0300-1234567" value={form.parent_phone} onChange={e=>setForm({...form,parent_phone:e.target.value})}/></div>
+                <div className="form-group"><label className="form-label">Address</label><input className="form-input" placeholder="Full address" value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></div>
               </div>
-              <div className="form-group"><label className="form-label">Address</label><input className="form-input" placeholder="Full address" value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={()=>setModalOpen(false)}>Cancel</button>
@@ -264,9 +261,9 @@ export default function Students() {
               <div className="form-row">
                 {[
                   ['Father\'s Name', viewStudent.father_name || viewStudent.fatherName],
-                  ['Gender', viewStudent.gender],
-                  ['Guardian', viewStudent.guardian_name || viewStudent.guardian],
-                  ['Phone', viewStudent.guardian_phone || viewStudent.phone],
+                  ['School Name', viewStudent.school_name || viewStudent.schoolName],
+                  ['Parent Phone No', viewStudent.parent_phone || viewStudent.guardian_phone || viewStudent.phone],
+                  ['Address', viewStudent.address],
                 ].map(([l,v])=>(
                   <div key={l}>
                     <div className="text-xs text-muted" style={{ marginBottom:2, fontWeight:600, textTransform:'uppercase' }}>{l}</div>

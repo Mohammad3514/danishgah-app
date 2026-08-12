@@ -113,8 +113,8 @@ export default function ImportData() {
             name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student') || `Student ${i+1}`,
             father_name: getCol(row, 'father_name', 'father name', 'father', 'guardian'),
             class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)',
-            gender: getCol(row, 'gender', 'sex') || 'Male',
-            guardian_phone: getCol(row, 'phone', 'mobile', 'contact', 'guardian phone', 'phone number'),
+            school_name: getCol(row, 'school_name', 'school name', 'school', 'institute'),
+            parent_phone: getCol(row, 'parent_phone', 'parent phone', 'phone', 'mobile', 'contact', 'guardian phone', 'phone number'),
             address: getCol(row, 'address', 'city', 'location'),
             status: 'Active'
           }));
