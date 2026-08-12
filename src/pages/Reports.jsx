@@ -31,22 +31,20 @@ const expensePie = [
 ];
 
 const attendanceData = [
-  { class: 'Class 1', present: 92, absent: 8 },
-  { class: 'Class 2', present: 88, absent: 12 },
-  { class: 'Class 3', present: 95, absent: 5 },
-  { class: 'Class 4', present: 85, absent: 15 },
-  { class: 'Class 5', present: 90, absent: 10 },
-  { class: 'Class 6', present: 78, absent: 22 },
-  { class: 'Class 7', present: 83, absent: 17 },
-  { class: 'Class 8', present: 91, absent: 9 },
+  { class: 'Muntazir (3-4)', present: 92, absent: 8 },
+  { class: 'Muntaqim (5)', present: 88, absent: 12 },
+  { class: 'Zaman (6)', present: 95, absent: 5 },
+  { class: 'Qaim (7-8)', present: 85, absent: 15 },
+  { class: 'Hujjat (9-10)', present: 90, absent: 10 },
+  { class: 'Senior Class', present: 94, absent: 6 },
 ];
 
 const defaulters = [
-  { name: 'Ali Hassan', class: 'Class 5', months: 3, amount: 7500 },
-  { name: 'Sana Malik', class: 'Class 3', months: 2, amount: 5000 },
-  { name: 'Umar Farooq', class: 'Class 7', months: 4, amount: 10000 },
-  { name: 'Hina Akhtar', class: 'Class 1', months: 1, amount: 2500 },
-  { name: 'Bilal Ahmed', class: 'Class 8', months: 2, amount: 6000 },
+  { name: 'Ali Hassan', class: 'Muntaqim (5)', months: 3, amount: 7500 },
+  { name: 'Sana Malik', class: 'Muntazir (3-4)', months: 2, amount: 5000 },
+  { name: 'Umar Farooq', class: 'Qaim (7-8)', months: 4, amount: 10000 },
+  { name: 'Hina Akhtar', class: 'Senior Class', months: 1, amount: 2500 },
+  { name: 'Bilal Ahmed', class: 'Hujjat (9-10)', months: 2, amount: 6000 },
 ];
 
 const RADIAN = Math.PI / 180;

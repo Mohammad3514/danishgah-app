@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ClipboardList, Check, X, Clock, Users, Calendar } from 'lucide-react';
 
-const CLASSES = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
 const dummyStudentsClass5 = [
   { id: 1, rollNo: '001', name: 'Ahmed Ali Khan' },
@@ -20,7 +20,7 @@ const dummyStudentsClass5 = [
 
 export default function Attendance() {
   const [tab, setTab] = useState('mark');
-  const [selectedClass, setSelectedClass] = useState('Class 5');
+  const [selectedClass, setSelectedClass] = useState('Muntaqim (5)');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState('2025-08');
 

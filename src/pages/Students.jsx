@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Download, Eye, X, User } from 'lucide-react';
 import { supabase } from '../supabase';
 
-const CLASSES = ['Class 1','Class 2','Class 3','Class 4','Class 5','Class 6','Class 7','Class 8','Class 9','Class 10'];
+const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
 const initStudents = [
-  { id:1, roll_number:'001', name:'Ahmed Ali Khan',    father_name:'Ali Khan',      class:'Class 5', section:'A', gender:'Male',   dob:'2014-03-12', guardian_name:'Ali Khan',     phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
-  { id:2, roll_number:'002', name:'Fatima Noor',        father_name:'Noor Ahmed',    class:'Class 7', section:'A', gender:'Female', dob:'2012-07-22', guardian_name:'Noor Ahmed',   phone:'0321-2345678', address:'Flat 3B, Block C, Karachi',  status:'Active' },
-  { id:3, roll_number:'003', name:'Usman Tariq',        father_name:'Tariq Mehmood', class:'Class 3', section:'B', gender:'Male',   dob:'2016-01-05', guardian_name:'Tariq Mehmood',phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad',  status:'Active' },
+  { id:1, roll_number:'001', name:'Ahmed Ali Khan',    father_name:'Ali Khan',      class:'Muntaqim (5)', gender:'Male',   dob:'2014-03-12', guardian_name:'Ali Khan',     phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
+  { id:2, roll_number:'002', name:'Fatima Noor',        father_name:'Noor Ahmed',    class:'Qaim (7-8)', gender:'Female', dob:'2012-07-22', guardian_name:'Noor Ahmed',   phone:'0321-2345678', address:'Flat 3B, Block C, Karachi',  status:'Active' },
+  { id:3, roll_number:'003', name:'Usman Tariq',        father_name:'Tariq Mehmood', class:'Muntazir (3-4)', gender:'Male',   dob:'2016-01-05', guardian_name:'Tariq Mehmood',phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad',  status:'Active' },
 ];
 
-const emptyForm = { roll_number:'', name:'', father_name:'', class:'Class 1', section:'A', gender:'Male', date_of_birth:'', guardian_name:'', guardian_phone:'', address:'', status:'Active' };
+const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', gender:'Male', date_of_birth:'', guardian_name:'', guardian_phone:'', address:'', status:'Active' };
 
 function Avatar({ name, size = 36 }) {
   const initials = (name || 'S').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -69,8 +69,7 @@ export default function Students() {
       roll_number: s.roll_number || s.rollNo || '',
       name: s.name || '',
       father_name: s.father_name || s.fatherName || '',
-      class: s.class || 'Class 1',
-      section: s.section || 'A',
+      class: s.class || 'Muntazir (3-4)',
       gender: s.gender || 'Male',
       date_of_birth: s.date_of_birth || s.dob || '',
       guardian_name: s.guardian_name || s.guardian || '',
@@ -122,8 +121,8 @@ export default function Students() {
   };
 
   const exportCSV = () => {
-    const headers = ['Roll No','Name','Father Name','Class','Section','Gender','Guardian','Phone','Address','Status'];
-    const rows = students.map(s => [s.roll_number || s.rollNo, s.name, s.father_name || s.fatherName, s.class, s.section, s.gender, s.guardian_name || s.guardian, s.guardian_phone || s.phone, `"${s.address || ''}"`, s.status]);
+    const headers = ['Roll No','Name','Father Name','Class','Gender','Guardian','Phone','Address','Status'];
+    const rows = students.map(s => [s.roll_number || s.rollNo, s.name, s.father_name || s.fatherName, s.class, s.gender, s.guardian_name || s.guardian, s.guardian_phone || s.phone, `"${s.address || ''}"`, s.status]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'students.csv'; a.click();
@@ -148,7 +147,7 @@ export default function Students() {
             <Search size={14} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)' }}/>
             <input id="student-search" className="form-input" style={{ paddingLeft: 32 }} placeholder="Search by name or roll number..." value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
-          <select className="form-select" style={{ flex:'0 0 140px' }} value={filterClass} onChange={e=>setFilterClass(e.target.value)}>
+          <select className="form-select" style={{ flex:'0 0 160px' }} value={filterClass} onChange={e=>setFilterClass(e.target.value)}>
             <option value="">All Classes</option>
             {CLASSES.map(c=><option key={c}>{c}</option>)}
           </select>
@@ -188,7 +187,7 @@ export default function Students() {
                   </div>
                 </td>
                 <td className="text-muted font-semibold">{s.roll_number || s.rollNo}</td>
-                <td><span className="badge badge-blue">{s.class} – {s.section || 'A'}</span></td>
+                <td><span className="badge badge-blue">{s.class}</span></td>
                 <td>{s.gender || 'Male'}</td>
                 <td>{s.guardian_phone || s.phone || '—'}</td>
                 <td><span className={`badge ${s.status==='Active'?'badge-green':'badge-gray'}`}>{s.status || 'Active'}</span></td>
@@ -227,11 +226,6 @@ export default function Students() {
                     {CLASSES.map(c=><option key={c}>{c}</option>)}
                   </select>
                 </div>
-                <div className="form-group"><label className="form-label">Section</label>
-                  <select className="form-select" value={form.section} onChange={e=>setForm({...form,section:e.target.value})}>
-                    {['A','B','C','D'].map(x=><option key={x}>{x}</option>)}
-                  </select>
-                </div>
                 <div className="form-group"><label className="form-label">Gender</label>
                   <select className="form-select" value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}>
                     <option>Male</option><option>Female</option><option>Other</option>
@@ -264,7 +258,7 @@ export default function Students() {
                 <Avatar name={viewStudent.name} size={56}/>
                 <div>
                   <h2 style={{ fontSize:'1.2rem' }}>{viewStudent.name}</h2>
-                  <p style={{ color:'var(--text-muted)', fontSize:'0.875rem' }}>Roll No: {viewStudent.roll_number || viewStudent.rollNo} | {viewStudent.class} – {viewStudent.section || 'A'}</p>
+                  <p style={{ color:'var(--text-muted)', fontSize:'0.875rem' }}>Roll No: {viewStudent.roll_number || viewStudent.rollNo} | {viewStudent.class}</p>
                 </div>
               </div>
               <div className="form-row">

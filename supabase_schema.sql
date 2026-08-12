@@ -134,8 +134,10 @@ ALTER TABLE fee_structure    DISABLE ROW LEVEL SECURITY;
 -- SAMPLE DATA
 -- ============================================================
 INSERT INTO fee_structure (class_name, amount) VALUES
-  ('Class 1', 2500), ('Class 2', 2500), ('Class 3', 2500),
-  ('Class 4', 3000), ('Class 5', 3000), ('Class 6', 3000),
-  ('Class 7', 3500), ('Class 8', 3500), ('Class 9', 4000),
-  ('Class 10', 4000)
+  ('Muntazir (3-4)', 2500),
+  ('Muntaqim (5)', 3000),
+  ('Zaman (6)', 3000),
+  ('Qaim (7-8)', 3500),
+  ('Hujjat (9-10)', 4000),
+  ('Senior Class', 4500)
 ON CONFLICT DO NOTHING;

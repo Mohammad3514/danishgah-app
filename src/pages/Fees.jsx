@@ -1,29 +1,30 @@
 import React, { useState } from 'react';
 import { DollarSign, Printer, Search, Plus, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
 
-const CLASSES = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
 const initFeeStructure = [
-  { class: 'Class 1', fee: 2500 }, { class: 'Class 2', fee: 2500 },
-  { class: 'Class 3', fee: 2500 }, { class: 'Class 4', fee: 3000 },
-  { class: 'Class 5', fee: 3000 }, { class: 'Class 6', fee: 3000 },
-  { class: 'Class 7', fee: 3500 }, { class: 'Class 8', fee: 3500 },
-  { class: 'Class 9', fee: 4000 }, { class: 'Class 10', fee: 4000 },
+  { class: 'Muntazir (3-4)', fee: 2500 },
+  { class: 'Muntaqim (5)', fee: 3000 },
+  { class: 'Zaman (6)', fee: 3000 },
+  { class: 'Qaim (7-8)', fee: 3500 },
+  { class: 'Hujjat (9-10)', fee: 4000 },
+  { class: 'Senior Class', fee: 4500 },
 ];
 
 const initTransactions = [
-  { id: 'REC-1001', student: 'Ahmed Ali Khan', rollNo: '001', class: 'Class 5', month: 'August 2025', amount: 3000, date: '2025-08-05', method: 'Cash', status: 'Paid' },
-  { id: 'REC-1002', student: 'Usman Tariq', rollNo: '003', class: 'Class 3', month: 'August 2025', amount: 2500, date: '2025-08-06', method: 'Online Bank', status: 'Paid' },
-  { id: 'REC-1003', student: 'Ayesha Siddiqui', rollNo: '004', class: 'Class 9', month: 'August 2025', amount: 4000, date: '2025-08-08', method: 'Cash', status: 'Paid' },
-  { id: 'REC-1004', student: 'Bilal Hassan', rollNo: '005', class: 'Class 2', month: 'August 2025', amount: 2500, date: '2025-08-09', method: 'Cheque', status: 'Paid' },
+  { id: 'REC-1001', student: 'Ahmed Ali Khan', rollNo: '001', class: 'Muntaqim (5)', month: 'August 2025', amount: 3000, date: '2025-08-05', method: 'Cash', status: 'Paid' },
+  { id: 'REC-1002', student: 'Usman Tariq', rollNo: '003', class: 'Muntazir (3-4)', month: 'August 2025', amount: 2500, date: '2025-08-06', method: 'Online Bank', status: 'Paid' },
+  { id: 'REC-1003', student: 'Ayesha Siddiqui', rollNo: '004', class: 'Hujjat (9-10)', month: 'August 2025', amount: 4000, date: '2025-08-08', method: 'Cash', status: 'Paid' },
+  { id: 'REC-1004', student: 'Bilal Hassan', rollNo: '005', class: 'Muntazir (3-4)', month: 'August 2025', amount: 2500, date: '2025-08-09', method: 'Cheque', status: 'Paid' },
 ];
 
 const initDefaulters = [
-  { id: 2, name: 'Fatima Noor', class: 'Class 7', phone: '0321-2345678', month: 'August 2025', amount: 3500, status: 'Overdue' },
-  { id: 6, name: 'Zainab Khalid', class: 'Class 6', phone: '0322-6789012', month: 'July & August 2025', amount: 6000, status: 'Overdue' },
-  { id: 9, name: 'Ali Raza', class: 'Class 10', phone: '0355-9012345', month: 'August 2025', amount: 4000, status: 'Overdue' },
-  { id: 11, name: 'Omar Sheikh', class: 'Class 5', phone: '0377-1234560', month: 'June, July, Aug 2025', amount: 9000, status: 'Defaulter' },
-  { id: 15, name: 'Fahad Ansari', class: 'Class 9', phone: '0312-5678234', month: 'August 2025', amount: 4000, status: 'Overdue' },
+  { id: 2, name: 'Fatima Noor', class: 'Qaim (7-8)', phone: '0321-2345678', month: 'August 2025', amount: 3500, status: 'Overdue' },
+  { id: 6, name: 'Zainab Khalid', class: 'Zaman (6)', phone: '0322-6789012', month: 'July & August 2025', amount: 6000, status: 'Overdue' },
+  { id: 9, name: 'Ali Raza', class: 'Hujjat (9-10)', phone: '0355-9012345', month: 'August 2025', amount: 4000, status: 'Overdue' },
+  { id: 11, name: 'Omar Sheikh', class: 'Muntaqim (5)', phone: '0377-1234560', month: 'June, July, Aug 2025', amount: 9000, status: 'Defaulter' },
+  { id: 15, name: 'Fahad Ansari', class: 'Hujjat (9-10)', phone: '0312-5678234', month: 'August 2025', amount: 4000, status: 'Overdue' },
 ];
 
 export default function Fees() {
@@ -33,7 +34,7 @@ export default function Fees() {
   
   // Payment Collect Form
   const [studentName, setStudentName] = useState('Fatima Noor');
-  const [studentClass, setStudentClass] = useState('Class 7');
+  const [studentClass, setStudentClass] = useState('Qaim (7-8)');
   const [month, setMonth] = useState('August 2025');
   const [amount, setAmount] = useState(3500);
   const [method, setMethod] = useState('Cash');
