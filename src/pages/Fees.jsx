@@ -3,7 +3,7 @@ import { DollarSign, Search, Plus, CheckCircle, AlertTriangle, Edit2, X, CheckCi
 import { supabase } from '../supabase';
 
 const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
-const MONTHS = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
+const ALL_MONTHS = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
 const YEARS = ['2026', '2025', '2024', '2027'];
 
 const defaultFeeStructure = [
@@ -26,6 +26,34 @@ const initTransactions = [
   { id: 'rec-1', student_name: 'Ahmed Ali Khan', roll_number: '001', class: 'Muntaqim (5)', month: 'August 2026', amount: 300, date: '2026-08-05', payment_method: 'Cash', status: 'Paid', card_issued: 'Yes' },
   { id: 'rec-2', student_name: 'Fatima Noor', roll_number: '002', class: 'Qaim (7-8)', month: 'August 2026', amount: 300, date: '2026-08-01', payment_method: 'Cash', status: 'Overdue', card_issued: 'Old Card' },
 ];
+
+// Helper to determine if a month has started relative to current real time or DB payments
+const isMonthStarted = (monthName, yearStr, transactions = []) => {
+  if (!monthName || !yearStr) return true;
+  // If database already contains a payment for this month, it is started
+  const hasDBEntry = transactions.some(t => {
+    const tm = (t.month || '').toLowerCase();
+    return tm.includes(monthName.toLowerCase()) && tm.includes(String(yearStr));
+  });
+  if (hasDBEntry) return true;
+
+  const monthMap = {
+    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+    'September': 9, 'October': 10, 'November': 11, 'December': 12
+  };
+  const mNum = monthMap[monthName];
+  if (!mNum) return true;
+
+  const yNum = Number(yearStr);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+
+  if (yNum < currentYear) return true;
+  if (yNum > currentYear) return false;
+  return mNum <= currentMonth;
+};
 
 export default function Fees() {
   const [tab, setTab] = useState('records');
@@ -95,7 +123,19 @@ export default function Fees() {
     fetchData();
   }, []);
 
-  // Compute merged records list strictly filtered by all criteria (Search, Class, Month, Year, Status, Card)
+  // Filter months to ONLY include months that have already started (or have DB records)
+  const availableMonths = React.useMemo(() => {
+    return ALL_MONTHS.filter(m => isMonthStarted(m, filterYear, transactions));
+  }, [filterYear, transactions]);
+
+  // Ensure filterMonth stays on an available month
+  useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(filterMonth)) {
+      setFilterMonth(availableMonths[availableMonths.length - 1] || 'August');
+    }
+  }, [availableMonths, filterMonth]);
+
+  // Compute merged records list strictly filtered by all criteria
   const displayedRecords = React.useMemo(() => {
     const selectedPeriod = `${filterMonth} ${filterYear}`;
     const targetMonth = filterMonth.trim().toLowerCase();
@@ -110,6 +150,9 @@ export default function Fees() {
       return found ? Number(found.fee) : 300;
     };
 
+    // Check if the selected month has actually started
+    const monthStarted = isMonthStarted(filterMonth, filterYear, transactions);
+
     // 1. Deduplicate student profiles by name
     const uniqueStudentsMap = new Map();
     students.forEach(s => {
@@ -121,7 +164,7 @@ export default function Fees() {
     });
     const uniqueStudents = Array.from(uniqueStudentsMap.values());
 
-    // 2. Map all unique students to their transaction or pending record for selected Month & Year
+    // 2. Map all unique students to their transaction or pending record (ONLY if month has started)
     let records = uniqueStudents.map(s => {
       const sName = (s.name || '').trim().toLowerCase();
       const sRoll = (s.roll_number || s.rollNo || '').trim().toLowerCase();
@@ -157,6 +200,11 @@ export default function Fees() {
         };
       }
 
+      // ONLY set status to Pending if month has ALREADY STARTED!
+      if (!monthStarted) {
+        return null;
+      }
+
       return {
         id: `temp-${s.id}-${filterMonth}-${filterYear}`,
         student_id: s.id,
@@ -170,7 +218,7 @@ export default function Fees() {
         card_issued: s.card_issued || 'No',
         date: new Date().toISOString().split('T')[0],
       };
-    });
+    }).filter(Boolean);
 
     // 3. Include any fee_payments from DB for selected Month & Year if student profile was not in students table
     transactions.forEach(t => {
@@ -367,7 +415,7 @@ export default function Fees() {
               </select>
 
               <select className="form-select" style={{ flex: '0 0 130px' }} value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
-                {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                {availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
 
               <select className="form-select" style={{ flex: '0 0 100px' }} value={filterYear} onChange={e => setFilterYear(e.target.value)}>
