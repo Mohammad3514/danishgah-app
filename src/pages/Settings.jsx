@@ -1,18 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Users, Settings as SettingsIcon, Lock, Save, Plus, X, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Users, Settings as SettingsIcon, Lock, Save, Plus, X, ShieldCheck, CheckCircle2, AlertCircle, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
-
-const initUsers = [
-  { id: '1', name: 'Admin User', email: 'admin@danishgah.edu', role: 'admin', is_active: true },
-  { id: '2', name: 'Accounts Officer', email: 'accounts@danishgah.edu', role: 'accountant', is_active: true },
-  { id: '3', name: 'Teacher Akram', email: 'teacher@danishgah.edu', role: 'teacher', is_active: true },
-];
 
 export default function Settings() {
   const { userProfile, role } = useAuth();
   const [tab, setTab] = useState('profile');
-  const [usersList, setUsersList] = useState(initUsers);
+  const [usersList, setUsersList] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Profile Form
@@ -31,6 +25,17 @@ export default function Settings() {
   const [newUserRole, setNewUserRole] = useState('teacher');
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState({ type: '', text: '' });
+
+  // Edit User Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editUserTarget, setEditUserTarget] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState('teacher');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editMsg, setEditMsg] = useState({ type: '', text: '' });
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -65,12 +70,16 @@ export default function Settings() {
       console.error(e);
     }
 
-    // 3. Include default seed users if missing
-    initUsers.forEach(seed => {
-      if (!combined.some(u => u.email.toLowerCase() === seed.email.toLowerCase())) {
-        combined.push(seed);
-      }
-    });
+    // 3. If list is completely empty, default to current user profile
+    if (combined.length === 0 && userProfile) {
+      combined.push({
+        id: 'self-1',
+        name: userProfile.name || 'Admin',
+        email: userProfile.email || 'admin@danishgah.edu',
+        role: userProfile.role || 'admin',
+        is_active: true,
+      });
+    }
 
     setUsersList(combined);
     setLoadingUsers(false);
@@ -167,6 +176,124 @@ export default function Settings() {
     }
   };
 
+  const openEditModal = (u) => {
+    setEditUserTarget(u);
+    setEditName(u.name || '');
+    setEditEmail(u.email || '');
+    setEditPassword(u.password || '');
+    setEditRole(u.role || 'teacher');
+    setEditIsActive(u.is_active !== false);
+    setEditMsg({ type: '', text: '' });
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setEditMsg({ type: '', text: '' });
+    if (!editName || !editEmail) {
+      setEditMsg({ type: 'error', text: 'Name and Email are required.' });
+      return;
+    }
+
+    setEditSubmitting(true);
+
+    try {
+      const cleanEmail = editEmail.trim().toLowerCase();
+      const cleanName = editName.trim();
+      const cleanPassword = editPassword ? editPassword.trim() : editUserTarget.password;
+
+      // 1. Update in Supabase database
+      if (supabase.from) {
+        const payload = {
+          name: cleanName,
+          role: editRole,
+          is_active: editIsActive,
+        };
+        if (editPassword) {
+          payload.password = cleanPassword;
+        }
+
+        const { error } = await supabase
+          .from('users')
+          .update(payload)
+          .eq('email', cleanEmail);
+
+        if (error) {
+          console.error('Update user error:', error);
+        }
+      }
+
+      // 2. Update local storage
+      try {
+        const stored = JSON.parse(localStorage.getItem('danishgah_custom_users') || '[]');
+        const updatedStored = stored.map(u => {
+          if (u.email.toLowerCase() === cleanEmail) {
+            return {
+              ...u,
+              name: cleanName,
+              role: editRole,
+              is_active: editIsActive,
+              password: cleanPassword || u.password,
+            };
+          }
+          return u;
+        });
+        localStorage.setItem('danishgah_custom_users', JSON.stringify(updatedStored));
+      } catch (e) {}
+
+      // 3. Update active usersList state
+      setUsersList(prev => prev.map(u => {
+        if (u.email.toLowerCase() === cleanEmail) {
+          return {
+            ...u,
+            name: cleanName,
+            role: editRole,
+            is_active: editIsActive,
+            password: cleanPassword || u.password,
+          };
+        }
+        return u;
+      }));
+
+      setEditMsg({ type: 'success', text: `User settings for ${cleanEmail} updated!` });
+      setTimeout(() => {
+        setEditModalOpen(false);
+        setEditMsg({ type: '', text: '' });
+      }, 1200);
+    } catch (err) {
+      setEditMsg({ type: 'error', text: err.message || 'Failed to update user.' });
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async (u) => {
+    if (!window.confirm(`Are you sure you want to remove user "${u.name || u.email}"?`)) {
+      return;
+    }
+
+    const cleanEmail = u.email.trim().toLowerCase();
+
+    // 1. Delete from Supabase database
+    try {
+      if (supabase.from) {
+        await supabase.from('users').delete().eq('email', cleanEmail);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    // 2. Delete from local storage
+    try {
+      const stored = JSON.parse(localStorage.getItem('danishgah_custom_users') || '[]');
+      const filtered = stored.filter(item => item.email.toLowerCase() !== cleanEmail);
+      localStorage.setItem('danishgah_custom_users', JSON.stringify(filtered));
+    } catch (e) {}
+
+    // 3. Remove from UI list
+    setUsersList(prev => prev.filter(item => item.email.toLowerCase() !== cleanEmail));
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
@@ -208,7 +335,7 @@ export default function Settings() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <h3>User Accounts ({usersList.length})</h3>
-              <p className="text-xs text-muted">Manage system users and assign access roles</p>
+              <p className="text-xs text-muted">Manage system users, edit passwords & assign access roles</p>
             </div>
             <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
               <Plus size={15} /> Add New User
@@ -224,11 +351,14 @@ export default function Settings() {
                   <th>Role</th>
                   <th>Access Scope</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingUsers ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>Loading user database...</td></tr>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24 }}>Loading user database...</td></tr>
+                ) : usersList.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No user accounts registered yet</td></tr>
                 ) : usersList.map(u => (
                   <tr key={u.id || u.email}>
                     <td className="font-semibold">{u.name}</td>
@@ -243,7 +373,17 @@ export default function Settings() {
                         {u.role === 'teacher' ? '🔒 Attendance Only' : u.role === 'admin' ? '⚡ Full System Access' : '💼 Restricted Access'}
                       </span>
                     </td>
-                    <td><span className="badge badge-green">{u.is_active !== false ? 'Active' : 'Inactive'}</span></td>
+                    <td><span className={`badge ${u.is_active !== false ? 'badge-green' : 'badge-gray'}`}>{u.is_active !== false ? 'Active' : 'Inactive'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-ghost btn-icon btn-sm" title="Edit User Settings & Password" onClick={() => openEditModal(u)}>
+                          <Edit2 size={14} />
+                        </button>
+                        <button className="btn btn-ghost btn-icon btn-sm" title="Delete User Account" onClick={() => handleDeleteUser(u)} style={{ color: 'var(--danger-400)' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -351,6 +491,104 @@ export default function Settings() {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   {submitting ? <><span className="spinner" /> Creating User...</> : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit User Settings */}
+      {editModalOpen && editUserTarget && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <h3>Edit User Settings</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setEditModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit}>
+              <div className="modal-body">
+                {editMsg.text && (
+                  <div className="card" style={{
+                    marginBottom: 16,
+                    background: editMsg.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                    borderColor: editMsg.type === 'error' ? 'var(--danger-500)' : 'var(--accent-500)',
+                    padding: '10px 14px'
+                  }}>
+                    <p style={{ color: editMsg.type === 'error' ? 'var(--danger-400)' : 'var(--accent-400)', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {editMsg.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+                      {editMsg.text}
+                    </p>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label">Full Name *</label>
+                  <input
+                    className="form-input"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    value={editEmail}
+                    disabled
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Update Password (Leave blank to keep existing)</label>
+                  <input
+                    type="password"
+                    className="form-input"
+                    placeholder="••••••••"
+                    value={editPassword}
+                    onChange={e => setEditPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">User Role & Access Level *</label>
+                  <select
+                    className="form-select"
+                    value={editRole}
+                    onChange={e => setEditRole(e.target.value)}
+                  >
+                    <option value="teacher">👨‍🏫 Teacher (Attendance Section Only)</option>
+                    <option value="admin">👑 Admin (Full System Access)</option>
+                    <option value="accountant">💼 Accountant (Finance & Reports Only)</option>
+                    <option value="viewer">👁️ Viewer (Read Only)</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Account Status</label>
+                  <select
+                    className="form-select"
+                    value={editIsActive ? 'active' : 'inactive'}
+                    onChange={e => setEditIsActive(e.target.value === 'active')}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive (Disabled)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editSubmitting}>
+                  {editSubmitting ? <><span className="spinner" /> Saving...</> : 'Save Changes'}
                 </button>
               </div>
             </form>
