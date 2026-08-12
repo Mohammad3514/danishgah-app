@@ -1,57 +1,124 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClipboardList, Check, X, Clock, Users, Calendar } from 'lucide-react';
+import { supabase } from '../supabase';
 
 const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
-const dummyStudentsClass5 = [
-  { id: 1, rollNo: '001', name: 'Ahmed Ali Khan' },
-  { id: 2, rollNo: '002', name: 'Fatima Noor' },
-  { id: 3, rollNo: '003', name: 'Usman Tariq' },
-  { id: 4, rollNo: '004', name: 'Ayesha Siddiqui' },
-  { id: 5, rollNo: '005', name: 'Bilal Hassan' },
-  { id: 6, rollNo: '006', name: 'Zainab Khalid' },
-  { id: 7, rollNo: '007', name: 'Muhammad Hamza' },
-  { id: 8, rollNo: '008', name: 'Sana Iqbal' },
-  { id: 9, rollNo: '009', name: 'Ali Raza' },
-  { id: 10, rollNo: '010', name: 'Hina Malik' },
-  { id: 11, rollNo: '011', name: 'Omar Sheikh' },
-  { id: 12, rollNo: '012', name: 'Maryam Butt' },
-];
-
 export default function Attendance() {
   const [tab, setTab] = useState('mark');
-  const [selectedClass, setSelectedClass] = useState('Muntaqim (5)');
+  const [selectedClass, setSelectedClass] = useState('Muntazir (3-4)');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState('2025-08');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  // Attendance state: studentId -> 'Present' | 'Absent' | 'Leave'
-  const [attendance, setAttendance] = useState({
-    1: 'Present', 2: 'Present', 3: 'Present', 4: 'Absent',
-    5: 'Present', 6: 'Leave', 7: 'Present', 8: 'Present',
-    9: 'Present', 10: 'Absent', 11: 'Present', 12: 'Present'
-  });
+  const [students, setStudents] = useState([]);
+  const [attendanceMap, setAttendanceMap] = useState({});
+  const [monthlyRecords, setMonthlyRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
 
-  const [savedMsg, setSavedMsg] = useState(false);
+  // 1. Fetch Students from database for selectedClass
+  const fetchStudentsAndAttendance = async () => {
+    setLoading(true);
+    try {
+      if (supabase.from) {
+        // Fetch students matching selectedClass (or all students if matching fails)
+        const { data: stData } = await supabase.from('students').select('*').order('name', { ascending: true });
+        
+        let filteredStudents = [];
+        if (stData && stData.length > 0) {
+          filteredStudents = stData.filter(s => {
+            if (!s.class) return true;
+            const c1 = s.class.toLowerCase();
+            const c2 = selectedClass.toLowerCase();
+            return c1 === c2 || c1.includes(c2) || c2.includes(c1);
+          });
+          setStudents(filteredStudents.length > 0 ? filteredStudents : stData);
+        }
 
-  const setStatus = (id, status) => {
-    setAttendance(prev => ({ ...prev, [id]: status }));
+        // Fetch existing attendance for selectedDate
+        const { data: attData } = await supabase.from('attendance').select('*').eq('date', selectedDate);
+        
+        const map = {};
+        if (attData && attData.length > 0) {
+          attData.forEach(a => {
+            if (a.student_id) map[a.student_id] = a.status;
+            if (a.student_name) map[a.student_name.trim().toLowerCase()] = a.status;
+          });
+        }
+        setAttendanceMap(map);
+
+        // Fetch monthly attendance for Matrix
+        const [year, month] = selectedMonth.split('-');
+        const startDate = `${year}-${month}-01`;
+        const endDate = `${year}-${month}-31`;
+        const { data: mData } = await supabase.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
+        if (mData) setMonthlyRecords(mData);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
   };
 
-  const handleSave = () => {
-    setSavedMsg(true);
-    setTimeout(() => setSavedMsg(false), 3000);
+  useEffect(() => {
+    fetchStudentsAndAttendance();
+  }, [selectedClass, selectedDate, selectedMonth]);
+
+  const setStatus = (student, status) => {
+    setAttendanceMap(prev => ({
+      ...prev,
+      [student.id]: status,
+      [student.name.trim().toLowerCase()]: status,
+    }));
   };
 
-  const presentCount = Object.values(attendance).filter(v => v === 'Present').length;
-  const absentCount = Object.values(attendance).filter(v => v === 'Absent').length;
-  const leaveCount = Object.values(attendance).filter(v => v === 'Leave').length;
+  const handleSave = async () => {
+    setSaving(true);
+    setSavedMsg('');
+
+    try {
+      const recordsToInsert = students.map(s => {
+        const status = attendanceMap[s.id] || attendanceMap[s.name.trim().toLowerCase()] || 'Present';
+        return {
+          student_id: s.id,
+          student_name: s.name,
+          class: s.class || selectedClass,
+          date: selectedDate,
+          status: status
+        };
+      });
+
+      if (supabase.from && recordsToInsert.length > 0) {
+        // Delete previous records for selectedClass & selectedDate to prevent duplicates
+        await supabase.from('attendance').delete().eq('class', selectedClass).eq('date', selectedDate);
+        
+        // Insert new attendance records
+        const { error } = await supabase.from('attendance').insert(recordsToInsert);
+        if (error) throw new Error(error.message);
+      }
+
+      setSavedMsg(`✅ Attendance saved successfully to database for ${selectedClass} on ${selectedDate}!`);
+      setTimeout(() => setSavedMsg(''), 3000);
+      await fetchStudentsAndAttendance();
+    } catch (err) {
+      console.error(err);
+      alert(`Error saving attendance: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const presentCount = students.filter(s => (attendanceMap[s.id] || attendanceMap[s.name.trim().toLowerCase()] || 'Present') === 'Present').length;
+  const absentCount = students.filter(s => (attendanceMap[s.id] || attendanceMap[s.name.trim().toLowerCase()]) === 'Absent').length;
+  const leaveCount = students.filter(s => (attendanceMap[s.id] || attendanceMap[s.name.trim().toLowerCase()]) === 'Leave').length;
 
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div className="page-header-left">
           <h1>Attendance Tracker</h1>
-          <p>Daily student attendance records and monthly tracker</p>
+          <p>Daily student attendance records and monthly matrix synced with Supabase database</p>
         </div>
       </div>
 
@@ -84,7 +151,7 @@ export default function Attendance() {
 
           {savedMsg && (
             <div className="card" style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'var(--accent-500)', marginBottom: 16 }}>
-              <p style={{ color: 'var(--accent-400)', fontWeight: 600 }}>✅ Attendance saved successfully for {selectedClass} on {selectedDate}!</p>
+              <p style={{ color: 'var(--accent-400)', fontWeight: 600 }}>{savedMsg}</p>
             </div>
           )}
 
@@ -94,34 +161,40 @@ export default function Attendance() {
                 <tr>
                   <th>Roll No</th>
                   <th>Student Name</th>
+                  <th>Class</th>
                   <th style={{ textAlign: 'center' }}>Attendance Status</th>
                 </tr>
               </thead>
               <tbody>
-                {dummyStudentsClass5.map(s => {
-                  const current = attendance[s.id] || 'Present';
+                {loading ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40 }}>Loading students from database...</td></tr>
+                ) : students.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No students found in database for {selectedClass}</td></tr>
+                ) : students.map(s => {
+                  const current = attendanceMap[s.id] || attendanceMap[s.name.trim().toLowerCase()] || 'Present';
                   return (
                     <tr key={s.id}>
-                      <td className="font-semibold text-muted">{s.rollNo}</td>
+                      <td className="font-semibold text-muted">{s.roll_number || s.rollNo || '—'}</td>
                       <td className="font-semibold">{s.name}</td>
+                      <td><span className="badge badge-blue">{s.class || selectedClass}</span></td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: 8 }}>
                           <button
                             className={`btn btn-sm ${current === 'Present' ? 'btn-success' : 'btn-ghost'}`}
-                            onClick={() => setStatus(s.id, 'Present')}
+                            onClick={() => setStatus(s, 'Present')}
                           >
                             <Check size={14} /> Present
                           </button>
                           <button
                             className={`btn btn-sm ${current === 'Absent' ? 'btn-danger' : 'btn-ghost'}`}
-                            onClick={() => setStatus(s.id, 'Absent')}
+                            onClick={() => setStatus(s, 'Absent')}
                           >
                             <X size={14} /> Absent
                           </button>
                           <button
                             className={`btn btn-sm ${current === 'Leave' ? 'btn-secondary' : 'btn-ghost'}`}
                             style={current === 'Leave' ? { background: 'var(--warning-500)', color: '#000' } : {}}
-                            onClick={() => setStatus(s.id, 'Leave')}
+                            onClick={() => setStatus(s, 'Leave')}
                           >
                             <Clock size={14} /> Leave
                           </button>
@@ -135,7 +208,9 @@ export default function Attendance() {
           </div>
 
           <div style={{ marginTop: 20, textAlign: 'right' }}>
-            <button className="btn btn-primary btn-lg" onClick={handleSave}>Submit Attendance</button>
+            <button className="btn btn-primary btn-lg" onClick={handleSave} disabled={saving || students.length === 0}>
+              {saving ? <><span className="spinner" /> Saving to Database...</> : 'Submit Attendance to Database'}
+            </button>
           </div>
         </div>
       )}
@@ -164,16 +239,21 @@ export default function Attendance() {
                 <div key={i} className="att-cell header">{i + 1}</div>
               ))}
 
-              {dummyStudentsClass5.map(s => (
+              {students.map(s => (
                 <React.Fragment key={s.id}>
                   <div className="att-cell name truncate">{s.name}</div>
                   {Array.from({ length: 31 }, (_, i) => {
-                    const isSunday = (i + 1) % 7 === 0;
-                    if (isSunday) return <div key={i} className="att-cell empty" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>S</div>;
-                    const st = (i + s.id) % 10 === 0 ? 'absent' : (i + s.id) % 15 === 0 ? 'leave' : 'present';
+                    const dayNum = String(i + 1).padStart(2, '0');
+                    const targetDateStr = `${selectedMonth}-${dayNum}`;
+                    const rec = monthlyRecords.find(r => 
+                      r.date === targetDateStr && 
+                      (String(r.student_id) === String(s.id) || (r.student_name && r.student_name.trim().toLowerCase() === s.name.trim().toLowerCase()))
+                    );
+
+                    const st = rec ? rec.status.toLowerCase() : 'empty';
                     return (
                       <div key={i} className={`att-cell ${st}`}>
-                        {st === 'present' ? 'P' : st === 'absent' ? 'A' : 'L'}
+                        {st === 'present' ? 'P' : st === 'absent' ? 'A' : st === 'leave' ? 'L' : '—'}
                       </div>
                     );
                   })}
