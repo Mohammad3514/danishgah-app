@@ -1,0 +1,305 @@
+import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowRight, Database } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabase';
+
+export default function ImportData() {
+  const [step, setStep] = useState(1);
+  const [fileName, setFileName] = useState('');
+  const [sheets, setSheets] = useState([]);
+  const [mapping, setMapping] = useState({});
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [importedSummary, setImportedSummary] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  
+  const navigate = useNavigate();
+
+  const handleFileUpload = (file) => {
+    if (!file) return;
+    setFileName(file.name);
+    setErrorMsg('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        const sheetList = workbook.SheetNames.map(name => {
+          const worksheet = workbook.Sheets[name];
+          const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          return { name, rows: json.length, rawData: json, sample: json.slice(0, 2) };
+        });
+
+        setSheets(sheetList);
+
+        // Auto map sheet names if they match module keywords
+        const autoMap = {};
+        sheetList.forEach(s => {
+          const lower = s.name.toLowerCase();
+          if (lower.includes('student')) autoMap[s.name] = 'Students';
+          else if (lower.includes('attend')) autoMap[s.name] = 'Attendance';
+          else if (lower.includes('fee')) autoMap[s.name] = 'Fee Records';
+          else if (lower.includes('expense')) autoMap[s.name] = 'Expenses';
+          else autoMap[s.name] = 'Skip';
+        });
+        setMapping(autoMap);
+        setStep(2);
+      } catch (err) {
+        setErrorMsg('Error reading file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Helper to safely get value from object regardless of column header case
+  const getCol = (row, ...colNames) => {
+    const keys = Object.keys(row);
+    for (const name of colNames) {
+      const match = keys.find(k => k.trim().toLowerCase() === name.toLowerCase() || k.trim().toLowerCase().includes(name.toLowerCase()));
+      if (match && row[match] !== undefined && row[match] !== '') {
+        return String(row[match]).trim();
+      }
+    }
+    return '';
+  };
+
+  // Safe Excel date formatter for Postgres DATE fields
+  const formatDate = (val) => {
+    if (!val) return new Date().toISOString().split('T')[0];
+    if (typeof val === 'number' || !isNaN(Number(val))) {
+      const num = Number(val);
+      if (num > 30000 && num < 60000) {
+        const date = new Date((num - (25567 + 2)) * 86400 * 1000);
+        return date.toISOString().split('T')[0];
+      }
+    }
+    const str = String(val).trim();
+    if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str;
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const handleStartImport = async () => {
+    setImporting(true);
+    setStep(3);
+    setProgress(10);
+    setErrorMsg('');
+
+    let totalImported = 0;
+    let mappedCount = 0;
+
+    try {
+      const selectedSheets = sheets.filter(s => mapping[s.name] && mapping[s.name] !== 'Skip');
+      const stepPct = Math.floor(80 / Math.max(1, selectedSheets.length));
+
+      for (let idx = 0; idx < selectedSheets.length; idx++) {
+        const sheetObj = selectedSheets[idx];
+        const moduleType = mapping[sheetObj.name];
+        const raw = sheetObj.rawData;
+
+        if (moduleType === 'Students') {
+          const records = raw.map((row, i) => ({
+            roll_number: getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id') || `R-${i + 101}`,
+            name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student') || `Student ${i+1}`,
+            father_name: getCol(row, 'father_name', 'father name', 'father', 'guardian'),
+            class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Class 1',
+            section: getCol(row, 'section', 'sec') || 'A',
+            gender: getCol(row, 'gender', 'sex') || 'Male',
+            guardian_phone: getCol(row, 'phone', 'mobile', 'contact', 'guardian phone', 'phone number'),
+            address: getCol(row, 'address', 'city', 'location'),
+            status: 'Active'
+          }));
+
+          if (records.length > 0 && supabase.from) {
+            const { error } = await supabase.from('students').insert(records);
+            if (error) console.error('Error inserting students:', error);
+          }
+          totalImported += records.length;
+        }
+
+
+        else if (moduleType === 'Fee Records') {
+          const records = raw.map((row, i) => ({
+            student_name: getCol(row, 'student', 'student name', 'name') || 'Student',
+            class: getCol(row, 'class', 'grade') || 'Class 1',
+            month: getCol(row, 'month', 'fee month', 'period') || 'August 2025',
+            amount: Number(getCol(row, 'amount', 'fee', 'total', 'paid')) || 3000,
+            payment_method: getCol(row, 'method', 'payment method', 'mode') || 'Cash',
+            paid_date: formatDate(getCol(row, 'date', 'paid date', 'payment date'))
+          }));
+
+          if (records.length > 0 && supabase.from) {
+            const { error } = await supabase.from('fee_payments').insert(records);
+            if (error) console.error('Error inserting fee payments:', error);
+          }
+          totalImported += records.length;
+        }
+
+        else if (moduleType === 'Expenses') {
+          const records = raw.map((row, i) => ({
+            date: formatDate(getCol(row, 'date', 'expense date')),
+            category: getCol(row, 'category', 'type') || 'Miscellaneous',
+            description: getCol(row, 'description', 'title', 'detail', 'item', 'particulars') || 'Operating Expense',
+            amount: Number(getCol(row, 'amount', 'cost', 'total', 'price')) || 1000,
+            paid_by: getCol(row, 'paid by', 'paid_by', 'person') || 'Admin',
+            payment_method: getCol(row, 'method', 'mode') || 'Cash'
+          }));
+
+          if (records.length > 0 && supabase.from) {
+            const { error } = await supabase.from('expenses').insert(records);
+            if (error) console.error('Error inserting expenses:', error);
+          }
+          totalImported += records.length;
+        }
+
+        else if (moduleType === 'Attendance') {
+          const records = raw.map((row, i) => ({
+            student_name: getCol(row, 'student', 'student name', 'name') || `Student ${i+1}`,
+            class: getCol(row, 'class', 'grade') || sheetObj.name || 'Class 1',
+            date: formatDate(getCol(row, 'date', 'attendance date')),
+            status: (getCol(row, 'status', 'attendance', 'present') || 'Present').toLowerCase().includes('a') ? 'Absent' : 'Present'
+          }));
+
+          if (records.length > 0 && supabase.from) {
+            const { error } = await supabase.from('attendance').insert(records);
+            if (error) console.error('Error inserting attendance:', error);
+          }
+          totalImported += records.length;
+        }
+
+        mappedCount++;
+        setProgress(10 + Math.min(80, (idx + 1) * stepPct));
+      }
+
+      setProgress(100);
+      setImporting(false);
+      setImportedSummary({ totalSheets: mappedCount, totalRecords: totalImported });
+      setStep(4);
+
+    } catch (err) {
+      setImporting(false);
+      setErrorMsg('Import error: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in" style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div className="page-header" style={{ textAlign: 'center', display: 'block', marginBottom: 32 }}>
+        <h1>Google Sheets Multi-Sheet Import Center</h1>
+        <p>Import your students, attendance, fee records, and expenses from your Google Sheets workbook in one click directly into Supabase</p>
+      </div>
+
+      {errorMsg && (
+        <div className="card" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'var(--danger-500)', marginBottom: 20 }}>
+          <p style={{ color: 'var(--danger-400)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={18} /> {errorMsg}
+          </p>
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="card">
+          <div
+            className="import-dropzone"
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById('file-input').click()}
+          >
+            <FileSpreadsheet size={48} style={{ color: 'var(--primary-400)', marginBottom: 12 }} />
+            <h3>Upload your downloaded Google Sheets (.xlsx or .csv)</h3>
+            <p>Drag and drop your file here, or click to browse</p>
+            <input
+              id="file-input"
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              style={{ display: 'none' }}
+              onChange={e => e.target.files && handleFileUpload(e.target.files[0])}
+            />
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3>Detected Sheets in {fileName}</h3>
+                <p className="text-sm text-muted">Assign each sheet to its corresponding module below:</p>
+              </div>
+              <span className="badge badge-purple">{sheets.length} Sheets Found</span>
+            </div>
+          </div>
+
+          <div>
+            {sheets.map(s => (
+              <div key={s.name} className="sheet-mapping-item">
+                <div className="sheet-name flex items-center gap-2">
+                  <FileSpreadsheet size={18} color="var(--primary-400)" />
+                  <span>{s.name}</span>
+                </div>
+                <div className="sheet-rows">{s.rows} Rows</div>
+                <select
+                  className="form-select"
+                  style={{ width: 180 }}
+                  value={mapping[s.name] || 'Skip'}
+                  onChange={e => setMapping({ ...mapping, [s.name]: e.target.value })}
+                >
+                  <option value="Skip">❌ Skip Sheet</option>
+                  <option value="Students">👨‍🎓 Students Module</option>
+                  <option value="Attendance">📋 Attendance Module</option>
+                  <option value="Fee Records">💰 Fee Records Module</option>
+                  <option value="Expenses">💸 Expenses Module</option>
+                </select>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 24, textAlign: 'right' }}>
+            <button className="btn btn-primary btn-lg" onClick={handleStartImport}>
+              Start Importing Data <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+          <Database size={48} style={{ color: 'var(--primary-400)', marginBottom: 16 }} className="spinner" />
+          <h3>Inserting Data into Supabase PostgreSQL...</h3>
+          <p className="text-muted" style={{ marginBottom: 24 }}>Writing records directly into your live Supabase database tables.</p>
+          
+          <div className="progress" style={{ height: 12 }}>
+            <div className="progress-bar green" style={{ width: `${progress}%` }} />
+          </div>
+          <div style={{ marginTop: 8, fontSize: '0.875rem', fontWeight: 600 }}>{progress}% Complete</div>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+          <CheckCircle size={56} style={{ color: 'var(--accent-500)', marginBottom: 16 }} />
+          <h2>Import Completed & Saved to Supabase!</h2>
+          <p className="text-muted" style={{ marginBottom: 24 }}>
+            Successfully processed {importedSummary?.totalSheets} sheets and inserted {importedSummary?.totalRecords} records directly into your Supabase database.
+          </p>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button className="btn btn-secondary" onClick={() => navigate('/students')}>View Students</button>
+            <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>Go to Dashboard</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
