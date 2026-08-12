@@ -34,19 +34,45 @@ export default function Settings() {
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
+    let combined = [];
+
+    // 1. Fetch from Supabase database `users` table
     try {
       if (supabase.from) {
         const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
         if (!error && data && data.length > 0) {
-          setUsersList(data);
-          setLoadingUsers(false);
-          return;
+          combined = [...data];
+        }
+      }
+    } catch (e) {
+      console.error('Fetch users error:', e);
+    }
+
+    // 2. Fetch locally created users
+    try {
+      const stored = localStorage.getItem('danishgah_custom_users');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(u => {
+            if (!combined.some(existing => existing.email.toLowerCase() === u.email.toLowerCase())) {
+              combined.unshift(u);
+            }
+          });
         }
       }
     } catch (e) {
       console.error(e);
     }
-    setUsersList(initUsers);
+
+    // 3. Include default seed users if missing
+    initUsers.forEach(seed => {
+      if (!combined.some(u => u.email.toLowerCase() === seed.email.toLowerCase())) {
+        combined.push(seed);
+      }
+    });
+
+    setUsersList(combined);
     setLoadingUsers(false);
   };
 
@@ -102,7 +128,7 @@ export default function Settings() {
         }
       }
 
-      // 3. Update UI state
+      // 3. Persist locally for instant & offline reliability
       const createdRecord = {
         id: Date.now().toString(),
         name: newUserName,
@@ -112,7 +138,14 @@ export default function Settings() {
         is_active: true,
       };
 
-      setUsersList(prev => [createdRecord, ...prev.filter(u => u.email !== newUserEmail)]);
+      try {
+        const stored = JSON.parse(localStorage.getItem('danishgah_custom_users') || '[]');
+        const updatedStored = [createdRecord, ...stored.filter(u => u.email.toLowerCase() !== newUserEmail.toLowerCase())];
+        localStorage.setItem('danishgah_custom_users', JSON.stringify(updatedStored));
+      } catch (e) {}
+
+      // 4. Update UI state
+      setUsersList(prev => [createdRecord, ...prev.filter(u => u.email.toLowerCase() !== newUserEmail.toLowerCase())]);
       setFormMsg({ type: 'success', text: `User ${newUserEmail} successfully added to database!` });
       setTimeout(() => {
         setModalOpen(false);
