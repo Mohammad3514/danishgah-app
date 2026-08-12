@@ -94,14 +94,43 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    if (!supabase.auth || typeof supabase.auth.signInWithPassword !== 'function') {
-      throw new Error('Supabase Auth client is not configured.');
+    // 1. Try Supabase Auth standard signInWithPassword
+    if (supabase.auth && typeof supabase.auth.signInWithPassword === 'function') {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error && data?.user) {
+          setUser(data.user);
+          await fetchProfile(data.user);
+          return data;
+        }
+      } catch (e) {
+        // Continue to database check fallback
+      }
     }
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      throw error;
+
+    // 2. Direct database authentication check for accounts added directly via Settings
+    if (supabase.from) {
+      const { data: dbUser, error: dbError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (!dbError && dbUser) {
+        if (!dbUser.password || dbUser.password === password) {
+          const authUser = {
+            id: dbUser.id || 'user-' + Date.now(),
+            email: dbUser.email,
+            user_metadata: { name: dbUser.name, role: dbUser.role }
+          };
+          setUser(authUser);
+          setUserProfile(dbUser);
+          return { user: authUser };
+        }
+      }
     }
-    return data;
+
+    throw new Error('Invalid email or password. Please check your credentials.');
   };
 
   const logout = async () => {

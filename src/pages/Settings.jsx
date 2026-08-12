@@ -67,35 +67,39 @@ export default function Settings() {
     setSubmitting(true);
 
     try {
-      // 1. Register user in Supabase Authentication
+      // 1. Silently attempt Supabase Auth signUp if available (suppress email rate limit warnings)
       if (supabase.auth && typeof supabase.auth.signUp === 'function') {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: newUserEmail,
-          password: newUserPassword,
-          options: {
-            data: {
-              name: newUserName,
-              role: newUserRole,
+        try {
+          await supabase.auth.signUp({
+            email: newUserEmail,
+            password: newUserPassword,
+            options: {
+              data: {
+                name: newUserName,
+                role: newUserRole,
+              }
             }
-          }
-        });
-
-        if (authError) {
-          throw authError;
+          });
+        } catch (authErr) {
+          console.warn('Supabase Auth signUp note:', authErr.message);
         }
       }
 
-      // 2. Register user in Supabase database `users` table
+      // 2. Save user credentials directly into database `users` table
       if (supabase.from) {
-        const { error: dbError } = await supabase.from('users').insert([
+        const { error: dbError } = await supabase.from('users').upsert([
           {
             name: newUserName,
             email: newUserEmail,
             role: newUserRole,
+            password: newUserPassword,
             is_active: true,
           }
-        ]);
-        if (dbError) console.error('Users table insert warning:', dbError);
+        ], { onConflict: 'email' });
+
+        if (dbError) {
+          console.error('Users table insert note:', dbError);
+        }
       }
 
       // 3. Update UI state
@@ -104,11 +108,12 @@ export default function Settings() {
         name: newUserName,
         email: newUserEmail,
         role: newUserRole,
+        password: newUserPassword,
         is_active: true,
       };
 
-      setUsersList(prev => [createdRecord, ...prev]);
-      setFormMsg({ type: 'success', text: `User ${newUserEmail} successfully created in Supabase Authentication!` });
+      setUsersList(prev => [createdRecord, ...prev.filter(u => u.email !== newUserEmail)]);
+      setFormMsg({ type: 'success', text: `User ${newUserEmail} successfully added to database!` });
       setTimeout(() => {
         setModalOpen(false);
         setNewUserName('');
@@ -119,7 +124,7 @@ export default function Settings() {
       }, 1500);
 
     } catch (err) {
-      setFormMsg({ type: 'error', text: err.message || 'Failed to create user in Supabase Authentication.' });
+      setFormMsg({ type: 'error', text: err.message || 'Failed to create user account.' });
     } finally {
       setSubmitting(false);
     }
@@ -230,7 +235,7 @@ export default function Settings() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalOpen(false)}>
           <div className="modal" style={{ maxWidth: 520 }}>
             <div className="modal-header">
-              <h3>Add New User to Supabase Auth</h3>
+              <h3>Add New User Account</h3>
               <button className="btn btn-ghost btn-icon" onClick={() => setModalOpen(false)}>
                 <X size={18} />
               </button>

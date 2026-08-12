@@ -4,12 +4,13 @@
 -- Run this in your Supabase SQL Editor (https://supabase.com)
 -- ============================================================
 
--- ---- USERS (synced with Supabase Auth) ----
+-- ---- USERS (synced with Supabase Auth & Database) ----
 CREATE TABLE IF NOT EXISTS users (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email       TEXT UNIQUE NOT NULL,
   name        TEXT NOT NULL,
   role        TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin','teacher','accountant','viewer')),
+  password    TEXT,
   phone       TEXT,
   is_active   BOOLEAN DEFAULT true,
   created_at  TIMESTAMPTZ DEFAULT now()
