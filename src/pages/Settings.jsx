@@ -90,18 +90,22 @@ export default function Settings() {
       return;
     }
 
+    const cleanEmail = newUserEmail.trim().toLowerCase();
+    const cleanPassword = newUserPassword.trim();
+    const cleanName = newUserName.trim();
+
     setSubmitting(true);
 
     try {
-      // 1. Silently attempt Supabase Auth signUp if available (suppress email rate limit warnings)
+      // 1. Silently attempt Supabase Auth signUp if available
       if (supabase.auth && typeof supabase.auth.signUp === 'function') {
         try {
           await supabase.auth.signUp({
-            email: newUserEmail,
-            password: newUserPassword,
+            email: cleanEmail,
+            password: cleanPassword,
             options: {
               data: {
-                name: newUserName,
+                name: cleanName,
                 role: newUserRole,
               }
             }
@@ -115,10 +119,10 @@ export default function Settings() {
       if (supabase.from) {
         const { error: dbError } = await supabase.from('users').upsert([
           {
-            name: newUserName,
-            email: newUserEmail,
+            name: cleanName,
+            email: cleanEmail,
             role: newUserRole,
-            password: newUserPassword,
+            password: cleanPassword,
             is_active: true,
           }
         ], { onConflict: 'email' });
@@ -131,22 +135,22 @@ export default function Settings() {
       // 3. Persist locally for instant & offline reliability
       const createdRecord = {
         id: Date.now().toString(),
-        name: newUserName,
-        email: newUserEmail,
+        name: cleanName,
+        email: cleanEmail,
         role: newUserRole,
-        password: newUserPassword,
+        password: cleanPassword,
         is_active: true,
       };
 
       try {
         const stored = JSON.parse(localStorage.getItem('danishgah_custom_users') || '[]');
-        const updatedStored = [createdRecord, ...stored.filter(u => u.email.toLowerCase() !== newUserEmail.toLowerCase())];
+        const updatedStored = [createdRecord, ...stored.filter(u => u.email.toLowerCase() !== cleanEmail)];
         localStorage.setItem('danishgah_custom_users', JSON.stringify(updatedStored));
       } catch (e) {}
 
       // 4. Update UI state
-      setUsersList(prev => [createdRecord, ...prev.filter(u => u.email.toLowerCase() !== newUserEmail.toLowerCase())]);
-      setFormMsg({ type: 'success', text: `User ${newUserEmail} successfully added to database!` });
+      setUsersList(prev => [createdRecord, ...prev.filter(u => u.email.toLowerCase() !== cleanEmail)]);
+      setFormMsg({ type: 'success', text: `User ${cleanEmail} successfully added to database!` });
       setTimeout(() => {
         setModalOpen(false);
         setNewUserName('');
