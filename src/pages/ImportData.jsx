@@ -108,16 +108,22 @@ export default function ImportData() {
         const raw = sheetObj.rawData;
 
         if (moduleType === 'Students') {
-          const records = raw.map((row, i) => ({
-            roll_number: getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id') || `R-${i + 101}`,
-            name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student') || `Student ${i+1}`,
-            father_name: getCol(row, 'father_name', 'father name', 'father', 'guardian'),
-            class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)',
-            school_name: getCol(row, 'school_name', 'school name', 'school', 'institute'),
-            father_phone: getCol(row, 'father_phone', 'father phone', 'father_phone_no', 'fathers_phone', 'father phone no', 'parent_phone', 'phone', 'mobile'),
-            address: getCol(row, 'address', 'city', 'location'),
-            status: 'Active'
-          }));
+          const records = raw.map((row, i) => {
+            const cardVal = getCol(row, 'card issued', 'card_issued', 'card');
+            const cardIssued = cardVal.toLowerCase().includes('y') ? 'Yes' : 'No';
+            return {
+              roll_number: getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr') || `R-${i + 101}`,
+              name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student') || `Student ${i+1}`,
+              father_name: getCol(row, 'father\'s name', 'father_name', 'father name', 'father', 'guardian'),
+              class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)',
+              school_name: getCol(row, 'school_name', 'school name', 'school', 'institute'),
+              father_phone: getCol(row, 'father\'s phone', 'father_phone', 'father phone', 'father_phone_no', 'fathers_phone', 'father phone no', 'parent_phone', 'phone', 'mobile'),
+              date_of_birth: formatDate(getCol(row, 'date of birth', 'date_of_birth', 'dob')),
+              address: getCol(row, 'address', 'city', 'location'),
+              card_issued: cardIssued,
+              status: 'Active'
+            };
+          });
 
           if (records.length > 0 && supabase.from) {
             const { error } = await supabase.from('students').insert(records);
@@ -128,14 +134,61 @@ export default function ImportData() {
 
 
         else if (moduleType === 'Fee Records') {
-          const records = raw.map((row, i) => ({
-            student_name: getCol(row, 'student', 'student name', 'name') || 'Student',
-            class: getCol(row, 'class', 'grade') || 'Class 1',
-            month: getCol(row, 'month', 'fee month', 'period') || 'August 2025',
-            amount: Number(getCol(row, 'amount', 'fee', 'total', 'paid')) || 3000,
-            payment_method: getCol(row, 'method', 'payment method', 'mode') || 'Cash',
-            paid_date: formatDate(getCol(row, 'date', 'paid date', 'payment date'))
-          }));
+          const records = [];
+
+          raw.forEach((row, i) => {
+            const stName = getCol(row, 'name', 'student', 'student name', 'fullname', 'full name') || `Student ${i+1}`;
+            const stClass = getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)';
+            const cardVal = getCol(row, 'card issued', 'card_issued', 'card');
+            const cardIssued = cardVal.toLowerCase().includes('y') ? 'Yes' : 'No';
+
+            // Check if sheet contains horizontal monthly columns like "Fees for April", "Fees for May", etc.
+            const keys = Object.keys(row);
+            const monthCols = keys.filter(k => 
+              k.toLowerCase().includes('fees for') || 
+              ['january','february','march','april','may','june','july','august','september','october','november','december'].some(m => k.toLowerCase().includes(m))
+            );
+
+            if (monthCols.length > 0) {
+              monthCols.forEach(colKey => {
+                const val = row[colKey];
+                const rawStr = String(val).trim();
+                const numVal = Number(rawStr.replace(/[^0-9.]/g, ''));
+
+                if (rawStr && !isNaN(numVal) && numVal > 0) {
+                  let monthName = colKey.replace(/fees?\s*(for)?/i, '').trim();
+                  if (monthName) {
+                    monthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                    if (!monthName.toLowerCase().includes('202')) monthName = `${monthName} 2025`;
+                  } else {
+                    monthName = 'August 2025';
+                  }
+
+                  records.push({
+                    student_name: stName,
+                    class: stClass,
+                    month: monthName,
+                    amount: numVal,
+                    payment_method: 'Cash',
+                    card_issued: cardIssued,
+                    status: 'Paid',
+                    paid_date: new Date().toISOString().split('T')[0]
+                  });
+                }
+              });
+            } else {
+              records.push({
+                student_name: stName,
+                class: stClass,
+                month: getCol(row, 'month', 'fee month', 'period') || 'August 2025',
+                amount: Number(getCol(row, 'amount', 'fee', 'total', 'paid')) || 3000,
+                payment_method: getCol(row, 'method', 'payment method', 'mode') || 'Cash',
+                card_issued: cardIssued,
+                status: 'Paid',
+                paid_date: formatDate(getCol(row, 'date', 'paid date', 'payment date'))
+              });
+            }
+          });
 
           if (records.length > 0 && supabase.from) {
             const { error } = await supabase.from('fee_payments').insert(records);
