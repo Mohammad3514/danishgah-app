@@ -11,13 +11,13 @@ const navItems = [
   {
     section: 'Overview',
     items: [
-      { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', roles: ['admin', 'teacher', 'accountant', 'viewer'] },
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', roles: ['admin', 'accountant', 'viewer'] },
     ]
   },
   {
     section: 'People',
     items: [
-      { label: 'Students', icon: Users, path: '/students', roles: ['admin', 'teacher', 'accountant'] },
+      { label: 'Students', icon: Users, path: '/students', roles: ['admin', 'accountant'] },
     ]
   },
   {

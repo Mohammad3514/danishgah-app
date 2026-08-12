@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
@@ -20,6 +20,9 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (allowedRoles && !allowedRoles.includes(role)) {
+    if (role === 'teacher') {
+      return <Navigate to="/attendance" replace />;
+    }
     return (
       <div className="empty-state" style={{ minHeight: '60vh' }}>
         <div className="empty-state-icon" style={{ fontSize: 32 }}>🔒</div>
