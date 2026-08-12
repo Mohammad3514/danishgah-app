@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS students (
   date_of_birth   DATE,
   address         TEXT,
   enrollment_date DATE DEFAULT CURRENT_DATE,
-  status          TEXT DEFAULT 'Active' CHECK (status IN ('Active','Inactive','Graduated','Expelled')),
+  status          TEXT DEFAULT 'Active' CHECK (status IN ('Active','Left','On Leave','Inactive')),
   photo_url       TEXT,
   created_at      TIMESTAMPTZ DEFAULT now()
 );

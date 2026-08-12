@@ -6,8 +6,8 @@ const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'H
 
 const initStudents = [
   { id:1, roll_number:'001', name:'Ahmed Ali Khan', father_name:'Ali Khan', class:'Muntaqim (5)', school_name:'Army Public School', dob:'2014-03-12', parent_phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
-  { id:2, roll_number:'002', name:'Fatima Noor', father_name:'Noor Ahmed', class:'Qaim (7-8)', school_name:'City Model School', dob:'2012-07-22', parent_phone:'0321-2345678', address:'Flat 3B, Block C, Karachi', status:'Active' },
-  { id:3, roll_number:'003', name:'Usman Tariq', father_name:'Tariq Mehmood', class:'Muntazir (3-4)', school_name:'Govt High School', dob:'2016-01-05', parent_phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad', status:'Active' },
+  { id:2, roll_number:'002', name:'Fatima Noor', father_name:'Noor Ahmed', class:'Qaim (7-8)', school_name:'City Model School', dob:'2012-07-22', parent_phone:'0321-2345678', address:'Flat 3B, Block C, Karachi', status:'On Leave' },
+  { id:3, roll_number:'003', name:'Usman Tariq', father_name:'Tariq Mehmood', class:'Muntazir (3-4)', school_name:'Govt High School', dob:'2016-01-05', parent_phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad', status:'Left' },
 ];
 
 const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', school_name:'', date_of_birth:'', parent_phone:'', address:'', status:'Active' };
@@ -134,6 +134,19 @@ export default function Students() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'students.csv'; a.click();
   };
 
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'Active':
+        return <span className="badge badge-green">Active</span>;
+      case 'On Leave':
+        return <span className="badge badge-yellow">On Leave</span>;
+      case 'Left':
+        return <span className="badge badge-red">Left</span>;
+      default:
+        return <span className="badge badge-green">{status || 'Active'}</span>;
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
@@ -153,13 +166,17 @@ export default function Students() {
             <Search size={14} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)' }}/>
             <input id="student-search" className="form-input" style={{ paddingLeft: 32 }} placeholder="Search by name or roll number..." value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
+
           <select className="form-select" style={{ flex:'0 0 160px' }} value={filterClass} onChange={e=>setFilterClass(e.target.value)}>
             <option value="">All Classes</option>
             {CLASSES.map(c=><option key={c}>{c}</option>)}
           </select>
-          <select className="form-select" style={{ flex:'0 0 130px' }} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
-            <option value="">All Status</option>
-            <option>Active</option><option>Inactive</option>
+
+          <select className="form-select" style={{ flex:'0 0 140px' }} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Left">Left</option>
+            <option value="On Leave">On Leave</option>
           </select>
         </div>
       </div>
@@ -192,12 +209,12 @@ export default function Students() {
                 <td><span className="badge badge-blue">{s.class}</span></td>
                 <td>{s.school_name || s.schoolName || '—'}</td>
                 <td>{s.parent_phone || s.guardian_phone || s.phone || '—'}</td>
-                <td><span className={`badge ${s.status==='Active'?'badge-green':'badge-gray'}`}>{s.status || 'Active'}</span></td>
+                <td>{getStatusBadge(s.status)}</td>
                 <td>
                   <div style={{ display:'flex', gap:6 }}>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="View" onClick={()=>setViewStudent(s)}><Eye size={14}/></button>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="Edit" onClick={()=>openEdit(s)}><Edit2 size={14}/></button>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="Delete" onClick={()=>handleDelete(s.id)} style={{ color:'var(--danger-400)' }}><Trash2 size={14}/></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" title="View Profile" onClick={()=>setViewStudent(s)}><Eye size={14}/></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" title="Edit Student" onClick={()=>openEdit(s)}><Edit2 size={14}/></button>
+                    <button className="btn btn-ghost btn-icon btn-sm" title="Delete Student" onClick={()=>handleDelete(s.id)} style={{ color:'var(--danger-400)' }}><Trash2 size={14}/></button>
                   </div>
                 </td>
               </tr>
@@ -218,10 +235,12 @@ export default function Students() {
                 <div className="form-group"><label className="form-label">Full Name *</label><input className="form-input" placeholder="Student full name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></div>
                 <div className="form-group"><label className="form-label">Roll Number *</label><input className="form-input" placeholder="e.g. 001" value={form.roll_number} onChange={e=>setForm({...form,roll_number:e.target.value})}/></div>
               </div>
+
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Father's Name</label><input className="form-input" placeholder="Father's full name" value={form.father_name} onChange={e=>setForm({...form,father_name:e.target.value})}/></div>
                 <div className="form-group"><label className="form-label">Date of Birth</label><input type="date" className="form-input" value={form.date_of_birth} onChange={e=>setForm({...form,date_of_birth:e.target.value})}/></div>
               </div>
+
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Class</label>
                   <select className="form-select" value={form.class} onChange={e=>setForm({...form,class:e.target.value})}>
@@ -230,10 +249,19 @@ export default function Students() {
                 </div>
                 <div className="form-group"><label className="form-label">School Name</label><input className="form-input" placeholder="e.g. Govt High School" value={form.school_name} onChange={e=>setForm({...form,school_name:e.target.value})}/></div>
               </div>
+
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Parent Phone No</label><input className="form-input" placeholder="0300-1234567" value={form.parent_phone} onChange={e=>setForm({...form,parent_phone:e.target.value})}/></div>
-                <div className="form-group"><label className="form-label">Address</label><input className="form-input" placeholder="Full address" value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></div>
+                <div className="form-group"><label className="form-label">Student Status</label>
+                  <select className="form-select" value={form.status || 'Active'} onChange={e=>setForm({...form,status:e.target.value})}>
+                    <option value="Active">Active</option>
+                    <option value="Left">Left</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
               </div>
+
+              <div className="form-group"><label className="form-label">Address</label><input className="form-input" placeholder="Full address" value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={()=>setModalOpen(false)}>Cancel</button>
@@ -263,6 +291,7 @@ export default function Students() {
                   ['Father\'s Name', viewStudent.father_name || viewStudent.fatherName],
                   ['School Name', viewStudent.school_name || viewStudent.schoolName],
                   ['Parent Phone No', viewStudent.parent_phone || viewStudent.guardian_phone || viewStudent.phone],
+                  ['Status', viewStudent.status || 'Active'],
                   ['Address', viewStudent.address],
                 ].map(([l,v])=>(
                   <div key={l}>
