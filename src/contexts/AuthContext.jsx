@@ -94,35 +94,17 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    if (supabase.auth && typeof supabase.auth.signInWithPassword === 'function') {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        // If user is not yet created in Supabase Auth, allow fallback demo login
-        const demoUser = { id: 'user-' + Date.now(), email, user_metadata: { name: email.split('@')[0] } };
-        const demoProfile = { name: email.split('@')[0], email, role: 'admin' };
-        setUser(demoUser);
-        setUserProfile(demoProfile);
-        setIsDemo(true);
-        localStorage.setItem('danishgah_demo_session', JSON.stringify({ user: demoUser, profile: demoProfile }));
-        return true;
-      }
-      return data;
-    } else {
-      loginAsDemo('admin');
+    if (!supabase.auth || typeof supabase.auth.signInWithPassword !== 'function') {
+      throw new Error('Supabase Auth client is not configured.');
     }
-  };
-
-  const loginAsDemo = (role = 'admin') => {
-    const profile = { ...DEMO_PROFILE, role };
-    setUser(DEMO_USER);
-    setUserProfile(profile);
-    setIsDemo(true);
-    localStorage.setItem('danishgah_demo_session', JSON.stringify({ user: DEMO_USER, profile }));
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw error;
+    }
+    return data;
   };
 
   const logout = async () => {
-    localStorage.removeItem('danishgah_demo_session');
-    setIsDemo(false);
     setUser(null);
     setUserProfile(null);
     if (supabase.auth && typeof supabase.auth.signOut === 'function') {
@@ -131,9 +113,16 @@ export function AuthProvider({ children }) {
   };
 
   const resetPassword = async (email) => {
-    if (supabase.auth && typeof supabase.auth.resetPasswordForEmail === 'function') {
-      return supabase.auth.resetPasswordForEmail(email);
+    if (!supabase.auth || typeof supabase.auth.resetPasswordForEmail !== 'function') {
+      throw new Error('Supabase Auth client is not configured.');
     }
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    if (error) {
+      throw error;
+    }
+    return data;
   };
 
   const value = {
@@ -145,7 +134,6 @@ export function AuthProvider({ children }) {
     isAccountant: userProfile?.role === 'accountant',
     loading,
     login,
-    loginAsDemo,
     logout,
     resetPassword,
   };

@@ -12,15 +12,10 @@ export default function Login() {
   const [resetMode, setResetMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
-  const { login, loginAsDemo, resetPassword } = useAuth();
+  const { login, resetPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/dashboard';
-
-  const handleDemoLogin = (role = 'admin') => {
-    loginAsDemo(role);
-    navigate(from, { replace: true });
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -30,14 +25,7 @@ export default function Login() {
       await login(email, password);
       navigate(from, { replace: true });
     } catch (err) {
-      const messages = {
-        'auth/user-not-found': 'No account found with this email.',
-        'auth/wrong-password': 'Incorrect password. Please try again.',
-        'auth/invalid-email': 'Please enter a valid email address.',
-        'auth/too-many-requests': 'Too many attempts. Please try again later.',
-        'auth/invalid-credential': 'Invalid email or password.',
-      };
-      setError(messages[err.code] || 'Login failed. Please try again.');
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -51,7 +39,7 @@ export default function Login() {
       await resetPassword(email);
       setResetSent(true);
     } catch (err) {
-      setError('Could not send reset email. Check the address and try again.');
+      setError(err.message || 'Could not send reset email. Check the address and try again.');
     } finally {
       setLoading(false);
     }
@@ -79,8 +67,8 @@ export default function Login() {
             <h2 className="login-title">Reset Password</h2>
             <p className="login-subtitle">
               {resetSent
-                ? "✅ Reset link sent! Check your email inbox."
-                : "Enter your email and we'll send a reset link."}
+                ? "✅ Password reset email sent! Check your inbox."
+                : "Enter your email to receive a password reset link."}
             </p>
 
             {!resetSent && (
@@ -188,18 +176,6 @@ export default function Login() {
                 {loading ? <><span className="spinner" /> Signing in...</> : 'Sign In'}
               </button>
             </form>
-
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-secondary)', textAlign: 'center' }}>
-              <span className="text-xs text-muted" style={{ display: 'block', marginBottom: 10 }}>QUICK PREVIEW MODE</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary btn-sm w-full" onClick={() => handleDemoLogin('admin')}>
-                  👑 Demo Admin
-                </button>
-                <button className="btn btn-secondary btn-sm w-full" onClick={() => handleDemoLogin('accountant')}>
-                  💼 Demo Accountant
-                </button>
-              </div>
-            </div>
           </>
         )}
       </div>
