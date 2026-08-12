@@ -204,7 +204,20 @@ export default function ImportData() {
           });
 
           if (feeRecords.length > 0 && supabase.from) {
-            const { error } = await supabase.from('fee_payments').insert(feeRecords);
+            let { error } = await supabase.from('fee_payments').insert(feeRecords);
+            
+            // Graceful fallback retry if status or card_issued columns are missing in live Supabase table
+            if (error && error.message && error.message.includes('status')) {
+              const fallbackRecords = feeRecords.map(({ status, ...rest }) => rest);
+              const retry = await supabase.from('fee_payments').insert(fallbackRecords);
+              error = retry.error;
+            }
+            if (error && error.message && error.message.includes('card_issued')) {
+              const fallbackRecords = feeRecords.map(({ status, card_issued, ...rest }) => rest);
+              const retry = await supabase.from('fee_payments').insert(fallbackRecords);
+              error = retry.error;
+            }
+
             if (error) throw new Error(`Failed to insert fee records into database: ${error.message}`);
             totalFeesImported += feeRecords.length;
           }

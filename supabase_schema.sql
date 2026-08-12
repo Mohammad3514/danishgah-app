@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS fee_payments (
   amount          NUMERIC(10,2) NOT NULL,
   payment_method  TEXT DEFAULT 'Cash',
   card_issued     TEXT DEFAULT 'No',
+  status          TEXT DEFAULT 'Paid',
   receipt_number  TEXT,
   paid_date       DATE DEFAULT CURRENT_DATE,
   remarks         TEXT,
