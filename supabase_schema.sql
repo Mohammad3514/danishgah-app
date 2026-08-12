@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS students (
   father_name     TEXT,
   class           TEXT NOT NULL,
   school_name     TEXT,
-  parent_phone    TEXT,
+  father_phone    TEXT,
   date_of_birth   DATE,
   address         TEXT,
   enrollment_date DATE DEFAULT CURRENT_DATE,

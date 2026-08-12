@@ -5,12 +5,12 @@ import { supabase } from '../supabase';
 const CLASSES = ['Muntazir (3-4)', 'Muntaqim (5)', 'Zaman (6)', 'Qaim (7-8)', 'Hujjat (9-10)', 'Senior Class'];
 
 const initStudents = [
-  { id:1, roll_number:'001', name:'Ahmed Ali Khan', father_name:'Ali Khan', class:'Muntaqim (5)', school_name:'Army Public School', dob:'2014-03-12', parent_phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
-  { id:2, roll_number:'002', name:'Fatima Noor', father_name:'Noor Ahmed', class:'Qaim (7-8)', school_name:'City Model School', dob:'2012-07-22', parent_phone:'0321-2345678', address:'Flat 3B, Block C, Karachi', status:'On Leave' },
-  { id:3, roll_number:'003', name:'Usman Tariq', father_name:'Tariq Mehmood', class:'Muntazir (3-4)', school_name:'Govt High School', dob:'2016-01-05', parent_phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad', status:'Left' },
+  { id:1, roll_number:'001', name:'Ahmed Ali Khan', father_name:'Ali Khan', class:'Muntaqim (5)', school_name:'Army Public School', dob:'2014-03-12', father_phone:'0301-1234567', address:'House 12, Street 4, Lahore', status:'Active' },
+  { id:2, roll_number:'002', name:'Fatima Noor', father_name:'Noor Ahmed', class:'Qaim (7-8)', school_name:'City Model School', dob:'2012-07-22', father_phone:'0321-2345678', address:'Flat 3B, Block C, Karachi', status:'On Leave' },
+  { id:3, roll_number:'003', name:'Usman Tariq', father_name:'Tariq Mehmood', class:'Muntazir (3-4)', school_name:'Govt High School', dob:'2016-01-05', father_phone:'0333-3456789', address:'Plot 7, Sector G, Islamabad', status:'Left' },
 ];
 
-const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', school_name:'', date_of_birth:'', parent_phone:'', address:'', status:'Active' };
+const emptyForm = { roll_number:'', name:'', father_name:'', class:'Muntazir (3-4)', school_name:'', date_of_birth:'', father_phone:'', address:'', status:'Active' };
 
 function Avatar({ name, size = 36 }) {
   const initials = (name || 'S').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -70,7 +70,7 @@ export default function Students() {
       class: s.class || 'Muntazir (3-4)',
       school_name: s.school_name || s.schoolName || '',
       date_of_birth: s.date_of_birth || s.dob || '',
-      parent_phone: s.parent_phone || s.guardian_phone || s.phone || '',
+      father_phone: s.father_phone || s.fathers_phone || s.parent_phone || s.guardian_phone || s.phone || '',
       address: s.address || '',
       status: s.status || 'Active'
     });
@@ -118,14 +118,14 @@ export default function Students() {
   };
 
   const exportCSV = () => {
-    const headers = ['Roll No','Name','Father Name','Class','School Name','Parent Phone No','Address','Status'];
+    const headers = ['Roll No','Name','Father Name','Class','School Name','Father Phone','Address','Status'];
     const rows = students.map(s => [
       s.roll_number || s.rollNo,
       s.name,
       s.father_name || s.fatherName,
       s.class,
       s.school_name || s.schoolName,
-      s.parent_phone || s.guardian_phone || s.phone,
+      s.father_phone || s.fathers_phone || s.parent_phone || s.guardian_phone || s.phone,
       `"${s.address || ''}"`,
       s.status
     ]);
@@ -186,7 +186,7 @@ export default function Students() {
           <thead>
             <tr>
               <th>Student</th><th>Roll No</th><th>Class</th><th>School Name</th>
-              <th>Parent Phone No</th><th>Status</th><th>Actions</th>
+              <th>Father Phone</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -208,7 +208,7 @@ export default function Students() {
                 <td className="text-muted font-semibold">{s.roll_number || s.rollNo}</td>
                 <td><span className="badge badge-blue">{s.class}</span></td>
                 <td>{s.school_name || s.schoolName || '—'}</td>
-                <td>{s.parent_phone || s.guardian_phone || s.phone || '—'}</td>
+                <td>{s.father_phone || s.fathers_phone || s.parent_phone || s.guardian_phone || s.phone || '—'}</td>
                 <td>{getStatusBadge(s.status)}</td>
                 <td>
                   <div style={{ display:'flex', gap:6 }}>
@@ -251,7 +251,7 @@ export default function Students() {
               </div>
 
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Parent Phone No</label><input className="form-input" placeholder="0300-1234567" value={form.parent_phone} onChange={e=>setForm({...form,parent_phone:e.target.value})}/></div>
+                <div className="form-group"><label className="form-label">Father Phone</label><input className="form-input" placeholder="0300-1234567" value={form.father_phone} onChange={e=>setForm({...form,father_phone:e.target.value})}/></div>
                 <div className="form-group"><label className="form-label">Student Status</label>
                   <select className="form-select" value={form.status || 'Active'} onChange={e=>setForm({...form,status:e.target.value})}>
                     <option value="Active">Active</option>
@@ -290,7 +290,7 @@ export default function Students() {
                 {[
                   ['Father\'s Name', viewStudent.father_name || viewStudent.fatherName],
                   ['School Name', viewStudent.school_name || viewStudent.schoolName],
-                  ['Parent Phone No', viewStudent.parent_phone || viewStudent.guardian_phone || viewStudent.phone],
+                  ['Father Phone', viewStudent.father_phone || viewStudent.fathers_phone || viewStudent.parent_phone || viewStudent.guardian_phone || viewStudent.phone],
                   ['Status', viewStudent.status || 'Active'],
                   ['Address', viewStudent.address],
                 ].map(([l,v])=>(

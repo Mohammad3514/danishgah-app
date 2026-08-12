@@ -114,7 +114,7 @@ export default function ImportData() {
             father_name: getCol(row, 'father_name', 'father name', 'father', 'guardian'),
             class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)',
             school_name: getCol(row, 'school_name', 'school name', 'school', 'institute'),
-            parent_phone: getCol(row, 'parent_phone', 'parent phone', 'phone', 'mobile', 'contact', 'guardian phone', 'phone number'),
+            father_phone: getCol(row, 'father_phone', 'father phone', 'father_phone_no', 'fathers_phone', 'father phone no', 'parent_phone', 'phone', 'mobile'),
             address: getCol(row, 'address', 'city', 'location'),
             status: 'Active'
           }));
