@@ -23,11 +23,11 @@ const initStudents = [
 ];
 
 const initTransactions = [
-  { id: 'rec-1', student_name: 'Ahmed Ali Khan', roll_number: '001', class: 'Muntaqim (5)', month: 'August 2025', amount: 3000, date: '2025-08-05', payment_method: 'Cash', status: 'Paid' },
-  { id: 'rec-2', student_name: 'Fatima Noor', roll_number: '002', class: 'Qaim (7-8)', month: 'August 2025', amount: 3500, date: '2025-08-01', payment_method: 'Cash', status: 'Overdue' },
-  { id: 'rec-3', student_name: 'Usman Tariq', roll_number: '003', class: 'Muntazir (3-4)', month: 'August 2025', amount: 2500, date: '2025-08-06', payment_method: 'Online Bank Transfer', status: 'Paid' },
-  { id: 'rec-4', student_name: 'Ayesha Siddiqui', roll_number: '004', class: 'Hujjat (9-10)', month: 'August 2025', amount: 4000, date: '2025-08-08', payment_method: 'Cash', status: 'Paid' },
-  { id: 'rec-5', student_name: 'Zainab Khalid', roll_number: '006', class: 'Zaman (6)', month: 'August 2025', amount: 3000, date: '2025-08-02', payment_method: 'Cash', status: 'Overdue' },
+  { id: 'rec-1', student_name: 'Ahmed Ali Khan', roll_number: '001', class: 'Muntaqim (5)', month: 'August 2025', amount: 3000, date: '2025-08-05', payment_method: 'Cash', status: 'Paid', card_issued: 'Yes' },
+  { id: 'rec-2', student_name: 'Fatima Noor', roll_number: '002', class: 'Qaim (7-8)', month: 'August 2025', amount: 3500, date: '2025-08-01', payment_method: 'Cash', status: 'Overdue', card_issued: 'No' },
+  { id: 'rec-3', student_name: 'Usman Tariq', roll_number: '003', class: 'Muntazir (3-4)', month: 'August 2025', amount: 2500, date: '2025-08-06', payment_method: 'Online Bank Transfer', status: 'Paid', card_issued: 'Yes' },
+  { id: 'rec-4', student_name: 'Ayesha Siddiqui', roll_number: '004', class: 'Hujjat (9-10)', month: 'August 2025', amount: 4000, date: '2025-08-08', payment_method: 'Cash', status: 'Paid', card_issued: 'No' },
+  { id: 'rec-5', student_name: 'Zainab Khalid', roll_number: '006', class: 'Zaman (6)', month: 'August 2025', amount: 3000, date: '2025-08-02', payment_method: 'Cash', status: 'Overdue', card_issued: 'No' },
 ];
 
 export default function Fees() {
@@ -42,6 +42,7 @@ export default function Fees() {
   const [filterClass, setFilterClass] = useState('');
   const [filterMonth, setFilterMonth] = useState('August 2025');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterCard, setFilterCard] = useState('');
 
   // Edit Fee Record Modal
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -54,6 +55,7 @@ export default function Fees() {
     amount: 3000,
     status: 'Paid',
     payment_method: 'Cash',
+    card_issued: 'No',
     date: new Date().toISOString().split('T')[0],
   });
   const [saving, setSaving] = useState(false);
@@ -80,6 +82,7 @@ export default function Fees() {
             date: f.paid_date || f.date || new Date().toISOString().split('T')[0],
             payment_method: f.payment_method || 'Cash',
             status: f.status || 'Paid',
+            card_issued: f.card_issued || 'No',
           }));
           setTransactions(mapped);
         }
@@ -125,6 +128,7 @@ export default function Fees() {
           amount: existingTx.amount || classDefaultFee,
           status: existingTx.status || 'Paid',
           payment_method: existingTx.payment_method || 'Cash',
+          card_issued: existingTx.card_issued || 'No',
           date: existingTx.date || new Date().toISOString().split('T')[0],
         };
       }
@@ -139,17 +143,23 @@ export default function Fees() {
         amount: classDefaultFee,
         status: 'Pending',
         payment_method: 'Cash',
+        card_issued: 'No',
         date: new Date().toISOString().split('T')[0],
       };
     });
 
-    // 3. Filter by Status if status filter selected
+    // 3. Filter by Status if selected
     if (filterStatus) {
       records = records.filter(r => r.status.toLowerCase() === filterStatus.toLowerCase());
     }
 
+    // 4. Filter by Card Issued if selected
+    if (filterCard) {
+      records = records.filter(r => r.card_issued.toLowerCase() === filterCard.toLowerCase());
+    }
+
     return records;
-  }, [students, transactions, search, filterClass, filterMonth, filterStatus, feeStructure]);
+  }, [students, transactions, search, filterClass, filterMonth, filterStatus, filterCard, feeStructure]);
 
   const openEdit = (record) => {
     const classDefaultFee = (feeStructure.find(f => f.class === record.class)?.fee) || 3000;
@@ -163,6 +173,7 @@ export default function Fees() {
       amount: record.amount || classDefaultFee,
       status: record.status || 'Paid',
       payment_method: record.payment_method || 'Cash',
+      card_issued: record.card_issued || 'No',
       date: record.date || new Date().toISOString().split('T')[0],
     });
     setEditModalOpen(true);
@@ -182,6 +193,7 @@ export default function Fees() {
         amount: Number(editForm.amount),
         payment_method: editForm.payment_method,
         status: editForm.status,
+        card_issued: editForm.card_issued,
         paid_date: editForm.date,
       };
 
@@ -227,13 +239,14 @@ export default function Fees() {
   const totalCollected = transactions.filter(t => t.status === 'Paid').reduce((acc, t) => acc + Number(t.amount || 0), 0);
   const totalPending = displayedRecords.filter(r => r.status !== 'Paid').reduce((acc, r) => acc + Number(r.amount || 0), 0);
   const paidCount = displayedRecords.filter(r => r.status === 'Paid').length;
+  const cardIssuedCount = displayedRecords.filter(r => r.card_issued === 'Yes').length;
 
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div className="page-header-left">
           <h1>Fee Management</h1>
-          <p>Filter student fee records by class or name and update payment status directly</p>
+          <p>Filter student fee records by class, name, or card issued status and update records directly</p>
         </div>
       </div>
 
@@ -257,7 +270,7 @@ export default function Fees() {
           <div className="stat-icon blue"><CheckCircle size={22} /></div>
           <div className="stat-info">
             <h3>{paidCount} / {displayedRecords.length}</h3>
-            <p>Students Paid ({filterClass || 'All Classes'})</p>
+            <p>Paid | Cards Issued: {cardIssuedCount}</p>
           </div>
         </div>
       </div>
@@ -284,25 +297,31 @@ export default function Fees() {
                 />
               </div>
 
-              <select className="form-select" style={{ flex: '0 0 170px' }} value={filterClass} onChange={e => setFilterClass(e.target.value)}>
+              <select className="form-select" style={{ flex: '0 0 160px' }} value={filterClass} onChange={e => setFilterClass(e.target.value)}>
                 <option value="">All Classes</option>
                 {CLASSES.map(c => <option key={c}>{c}</option>)}
               </select>
 
               <input
                 className="form-input"
-                style={{ flex: '0 0 150px' }}
+                style={{ flex: '0 0 140px' }}
                 value={filterMonth}
                 onChange={e => setFilterMonth(e.target.value)}
                 placeholder="Fee Month"
               />
 
-              <select className="form-select" style={{ flex: '0 0 140px' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+              <select className="form-select" style={{ flex: '0 0 130px' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                 <option value="">All Statuses</option>
                 <option value="Paid">Paid</option>
                 <option value="Pending">Pending</option>
                 <option value="Overdue">Overdue</option>
                 <option value="Defaulter">Defaulter</option>
+              </select>
+
+              <select className="form-select" style={{ flex: '0 0 140px' }} value={filterCard} onChange={e => setFilterCard(e.target.value)}>
+                <option value="">Card: All</option>
+                <option value="Yes">Card Issued (Yes)</option>
+                <option value="No">Card Issued (No)</option>
               </select>
             </div>
           </div>
@@ -319,15 +338,16 @@ export default function Fees() {
                   <th>Amount (PKR)</th>
                   <th>Payment Method</th>
                   <th>Payment Date</th>
+                  <th>Card Issued</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40 }}>Loading fee records...</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40 }}>Loading fee records...</td></tr>
                 ) : displayedRecords.length === 0 ? (
-                  <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No student fee records found matching criteria</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No student fee records found matching criteria</td></tr>
                 ) : displayedRecords.map(r => (
                   <tr key={r.id || r.student_name}>
                     <td className="font-semibold text-muted">{r.roll_number}</td>
@@ -339,6 +359,11 @@ export default function Fees() {
                     </td>
                     <td>{r.payment_method}</td>
                     <td className="text-sm text-muted">{r.date}</td>
+                    <td>
+                      <span className={`badge ${r.card_issued === 'Yes' ? 'badge-green' : 'badge-gray'}`}>
+                        {r.card_issued === 'Yes' ? '💳 Yes' : 'No'}
+                      </span>
+                    </td>
                     <td>
                       <span className={`badge ${
                         r.status === 'Paid' ? 'badge-green' : r.status === 'Pending' ? 'badge-yellow' : 'badge-red'
@@ -368,6 +393,7 @@ export default function Fees() {
                 <th>Class</th>
                 <th>Fee Month</th>
                 <th>Amount Due (PKR)</th>
+                <th>Card Issued</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -379,6 +405,11 @@ export default function Fees() {
                   <td><span className="badge badge-blue">{d.class}</span></td>
                   <td><span className="badge badge-yellow">{d.month}</span></td>
                   <td className="font-semibold" style={{ color: 'var(--danger-400)' }}>PKR {Number(d.amount).toLocaleString()}</td>
+                  <td>
+                    <span className={`badge ${d.card_issued === 'Yes' ? 'badge-green' : 'badge-gray'}`}>
+                      {d.card_issued === 'Yes' ? '💳 Yes' : 'No'}
+                    </span>
+                  </td>
                   <td><span className="badge badge-red">{d.status}</span></td>
                   <td>
                     <button className="btn btn-primary btn-sm" onClick={() => openEdit(d)}>
@@ -490,9 +521,17 @@ export default function Fees() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Payment Date</label>
-                    <input type="date" className="form-input" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} required />
+                    <label className="form-label">Card Issued</label>
+                    <select className="form-select" value={editForm.card_issued || 'No'} onChange={e => setEditForm({ ...editForm, card_issued: e.target.value })}>
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Payment Date</label>
+                  <input type="date" className="form-input" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} required />
                 </div>
               </div>
 

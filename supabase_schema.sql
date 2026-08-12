@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS fee_payments (
   month           TEXT NOT NULL,   -- e.g. "2025-08" or "August 2025"
   amount          NUMERIC(10,2) NOT NULL,
   payment_method  TEXT DEFAULT 'Cash',
+  card_issued     TEXT DEFAULT 'No',
   receipt_number  TEXT,
   paid_date       DATE DEFAULT CURRENT_DATE,
   remarks         TEXT,
