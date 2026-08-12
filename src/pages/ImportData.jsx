@@ -34,15 +34,13 @@ export default function ImportData() {
 
         setSheets(sheetList);
 
-        // Auto map sheet names if they match module keywords
+        // Auto map sheet names
         const autoMap = {};
         sheetList.forEach(s => {
           const lower = s.name.toLowerCase();
-          if (lower.includes('student')) autoMap[s.name] = 'Students';
-          else if (lower.includes('attend')) autoMap[s.name] = 'Attendance';
-          else if (lower.includes('fee')) autoMap[s.name] = 'Fee Records';
+          if (lower.includes('attend')) autoMap[s.name] = 'Attendance';
           else if (lower.includes('expense')) autoMap[s.name] = 'Expenses';
-          else autoMap[s.name] = 'Skip';
+          else autoMap[s.name] = 'Students & Fees'; // Default to Students & Fees (All-in-One)
         });
         setMapping(autoMap);
         setStep(2);
@@ -60,12 +58,16 @@ export default function ImportData() {
     }
   };
 
-  // Helper to safely get value from object regardless of column header case
+  // Helper to safely get value from object regardless of column header case, colons, or punctuation
   const getCol = (row, ...colNames) => {
     const keys = Object.keys(row);
     for (const name of colNames) {
-      const match = keys.find(k => k.trim().toLowerCase() === name.toLowerCase() || k.trim().toLowerCase().includes(name.toLowerCase()));
-      if (match && row[match] !== undefined && row[match] !== '') {
+      const match = keys.find(k => {
+        const cleanK = k.replace(/[:_]/g, ' ').toLowerCase().trim();
+        const cleanName = name.replace(/[:_]/g, ' ').toLowerCase().trim();
+        return cleanK === cleanName || cleanK.includes(cleanName);
+      });
+      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== '') {
         return String(row[match]).trim();
       }
     }
@@ -95,11 +97,18 @@ export default function ImportData() {
     setProgress(10);
     setErrorMsg('');
 
-    let totalImported = 0;
+    let totalStudentsImported = 0;
+    let totalFeesImported = 0;
+    let totalExpensesImported = 0;
+    let totalAttendanceImported = 0;
     let mappedCount = 0;
 
     try {
       const selectedSheets = sheets.filter(s => mapping[s.name] && mapping[s.name] !== 'Skip');
+      if (selectedSheets.length === 0) {
+        throw new Error('Please select at least one sheet module to import (do not leave all sheets as "Skip").');
+      }
+
       const stepPct = Math.floor(80 / Math.max(1, selectedSheets.length));
 
       for (let idx = 0; idx < selectedSheets.length; idx++) {
@@ -107,17 +116,31 @@ export default function ImportData() {
         const moduleType = mapping[sheetObj.name];
         const raw = sheetObj.rawData;
 
-        if (moduleType === 'Students') {
-          const records = raw.map((row, i) => {
+        // Filter out empty rows, header rows, or merged section title rows
+        const validRows = raw.filter(r => {
+          const stName = getCol(r, 'name', 'student name', 'fullname', 'full name', 'student');
+          if (!stName) return false;
+          const lower = stName.toLowerCase();
+          if (lower.includes('name:') || lower.includes('father') || lower.startsWith('class') || lower.startsWith('roll')) return false;
+          return stName.trim().length > 1;
+        });
+
+        const currentSectionClass = sheetObj.name.includes('(') ? sheetObj.name : 'Muntazir (3-4)';
+
+        // 1. Process Students
+        if (moduleType === 'Students' || moduleType === 'Students & Fees') {
+          const studentRecords = validRows.map((row, i) => {
             const cardVal = getCol(row, 'card issued', 'card_issued', 'card');
             const cardIssued = cardVal.toLowerCase().includes('y') ? 'Yes' : 'No';
+            const cls = getCol(row, 'class', 'grade', 'standard') || currentSectionClass;
+            
             return {
               roll_number: getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr') || `R-${i + 101}`,
-              name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student') || `Student ${i+1}`,
+              name: getCol(row, 'name', 'student name', 'fullname', 'full name', 'student'),
               father_name: getCol(row, 'father\'s name', 'father_name', 'father name', 'father', 'guardian'),
-              class: getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)',
+              class: cls,
               school_name: getCol(row, 'school_name', 'school name', 'school', 'institute'),
-              father_phone: getCol(row, 'father\'s phone', 'father_phone', 'father phone', 'father_phone_no', 'fathers_phone', 'father phone no', 'parent_phone', 'phone', 'mobile'),
+              father_phone: getCol(row, 'father\'s phone', 'father_phone', 'father phone', 'father_phone_no', 'fathers_phone', 'parent_phone', 'phone', 'mobile'),
               date_of_birth: formatDate(getCol(row, 'date of birth', 'date_of_birth', 'dob')),
               address: getCol(row, 'address', 'city', 'location'),
               card_issued: cardIssued,
@@ -125,27 +148,27 @@ export default function ImportData() {
             };
           });
 
-          if (records.length > 0 && supabase.from) {
-            const { error } = await supabase.from('students').insert(records);
-            if (error) console.error('Error inserting students:', error);
+          if (studentRecords.length > 0 && supabase.from) {
+            const { error } = await supabase.from('students').insert(studentRecords);
+            if (error) throw new Error(`Failed to insert students into database: ${error.message}`);
+            totalStudentsImported += studentRecords.length;
           }
-          totalImported += records.length;
         }
 
+        // 2. Process Monthly Fee Records (Horizontal columns like "Fees for April", "Fees for May", etc.)
+        if (moduleType === 'Fee Records' || moduleType === 'Students & Fees') {
+          const feeRecords = [];
 
-        else if (moduleType === 'Fee Records') {
-          const records = [];
-
-          raw.forEach((row, i) => {
-            const stName = getCol(row, 'name', 'student', 'student name', 'fullname', 'full name') || `Student ${i+1}`;
-            const stClass = getCol(row, 'class', 'grade', 'standard') || sheetObj.name || 'Muntazir (3-4)';
+          validRows.forEach((row) => {
+            const stName = getCol(row, 'name', 'student', 'student name', 'fullname', 'full name');
+            const stClass = getCol(row, 'class', 'grade', 'standard') || currentSectionClass;
             const cardVal = getCol(row, 'card issued', 'card_issued', 'card');
             const cardIssued = cardVal.toLowerCase().includes('y') ? 'Yes' : 'No';
 
-            // Check if sheet contains horizontal monthly columns like "Fees for April", "Fees for May", etc.
             const keys = Object.keys(row);
             const monthCols = keys.filter(k => 
               k.toLowerCase().includes('fees for') || 
+              k.toLowerCase().includes('fee') ||
               ['january','february','march','april','may','june','july','august','september','october','november','december'].some(m => k.toLowerCase().includes(m))
             );
 
@@ -164,7 +187,7 @@ export default function ImportData() {
                     monthName = 'August 2025';
                   }
 
-                  records.push({
+                  feeRecords.push({
                     student_name: stName,
                     class: stClass,
                     month: monthName,
@@ -176,29 +199,19 @@ export default function ImportData() {
                   });
                 }
               });
-            } else {
-              records.push({
-                student_name: stName,
-                class: stClass,
-                month: getCol(row, 'month', 'fee month', 'period') || 'August 2025',
-                amount: Number(getCol(row, 'amount', 'fee', 'total', 'paid')) || 3000,
-                payment_method: getCol(row, 'method', 'payment method', 'mode') || 'Cash',
-                card_issued: cardIssued,
-                status: 'Paid',
-                paid_date: formatDate(getCol(row, 'date', 'paid date', 'payment date'))
-              });
             }
           });
 
-          if (records.length > 0 && supabase.from) {
-            const { error } = await supabase.from('fee_payments').insert(records);
-            if (error) console.error('Error inserting fee payments:', error);
+          if (feeRecords.length > 0 && supabase.from) {
+            const { error } = await supabase.from('fee_payments').insert(feeRecords);
+            if (error) throw new Error(`Failed to insert fee records into database: ${error.message}`);
+            totalFeesImported += feeRecords.length;
           }
-          totalImported += records.length;
         }
 
-        else if (moduleType === 'Expenses') {
-          const records = raw.map((row, i) => ({
+        // 3. Process Expenses
+        if (moduleType === 'Expenses') {
+          const expenseRecords = validRows.map((row) => ({
             date: formatDate(getCol(row, 'date', 'expense date')),
             category: getCol(row, 'category', 'type') || 'Miscellaneous',
             description: getCol(row, 'description', 'title', 'detail', 'item', 'particulars') || 'Operating Expense',
@@ -207,26 +220,27 @@ export default function ImportData() {
             payment_method: getCol(row, 'method', 'mode') || 'Cash'
           }));
 
-          if (records.length > 0 && supabase.from) {
-            const { error } = await supabase.from('expenses').insert(records);
-            if (error) console.error('Error inserting expenses:', error);
+          if (expenseRecords.length > 0 && supabase.from) {
+            const { error } = await supabase.from('expenses').insert(expenseRecords);
+            if (error) throw new Error(`Failed to insert expenses into database: ${error.message}`);
+            totalExpensesImported += expenseRecords.length;
           }
-          totalImported += records.length;
         }
 
-        else if (moduleType === 'Attendance') {
-          const records = raw.map((row, i) => ({
-            student_name: getCol(row, 'student', 'student name', 'name') || `Student ${i+1}`,
-            class: getCol(row, 'class', 'grade') || sheetObj.name || 'Class 1',
+        // 4. Process Attendance
+        if (moduleType === 'Attendance') {
+          const attendanceRecords = validRows.map((row) => ({
+            student_name: getCol(row, 'name', 'student', 'student name'),
+            class: getCol(row, 'class', 'grade') || currentSectionClass,
             date: formatDate(getCol(row, 'date', 'attendance date')),
             status: (getCol(row, 'status', 'attendance', 'present') || 'Present').toLowerCase().includes('a') ? 'Absent' : 'Present'
           }));
 
-          if (records.length > 0 && supabase.from) {
-            const { error } = await supabase.from('attendance').insert(records);
-            if (error) console.error('Error inserting attendance:', error);
+          if (attendanceRecords.length > 0 && supabase.from) {
+            const { error } = await supabase.from('attendance').insert(attendanceRecords);
+            if (error) throw new Error(`Failed to insert attendance into database: ${error.message}`);
+            totalAttendanceImported += attendanceRecords.length;
           }
-          totalImported += records.length;
         }
 
         mappedCount++;
@@ -235,12 +249,20 @@ export default function ImportData() {
 
       setProgress(100);
       setImporting(false);
-      setImportedSummary({ totalSheets: mappedCount, totalRecords: totalImported });
+      setImportedSummary({
+        totalSheets: mappedCount,
+        students: totalStudentsImported,
+        fees: totalFeesImported,
+        expenses: totalExpensesImported,
+        attendance: totalAttendanceImported,
+        totalRecords: totalStudentsImported + totalFeesImported + totalExpensesImported + totalAttendanceImported
+      });
       setStep(4);
 
     } catch (err) {
       setImporting(false);
-      setErrorMsg('Import error: ' + err.message);
+      setStep(2);
+      setErrorMsg(err.message);
     }
   };
 
@@ -295,23 +317,24 @@ export default function ImportData() {
 
           <div>
             {sheets.map(s => (
-              <div key={s.name} className="sheet-mapping-item">
+              <div key={s.name} className="sheet-mapping-item" style={{ background: 'var(--bg-secondary)', padding: '14px 18px', borderRadius: 8, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div className="sheet-name flex items-center gap-2">
                   <FileSpreadsheet size={18} color="var(--primary-400)" />
-                  <span>{s.name}</span>
+                  <span className="font-semibold">{s.name}</span>
                 </div>
-                <div className="sheet-rows">{s.rows} Rows</div>
+                <div className="sheet-rows text-muted text-sm">{s.rows} Rows</div>
                 <select
                   className="form-select"
-                  style={{ width: 180 }}
-                  value={mapping[s.name] || 'Skip'}
+                  style={{ width: 220 }}
+                  value={mapping[s.name] || 'Students & Fees'}
                   onChange={e => setMapping({ ...mapping, [s.name]: e.target.value })}
                 >
-                  <option value="Skip">❌ Skip Sheet</option>
-                  <option value="Students">👨‍🎓 Students Module</option>
+                  <option value="Students & Fees">✨ Students & Fees (All-in-One)</option>
+                  <option value="Students">👨‍🎓 Students Only</option>
+                  <option value="Fee Records">💰 Fee Records Only</option>
                   <option value="Attendance">📋 Attendance Module</option>
-                  <option value="Fee Records">💰 Fee Records Module</option>
                   <option value="Expenses">💸 Expenses Module</option>
+                  <option value="Skip">❌ Skip Sheet</option>
                 </select>
               </div>
             ))}
@@ -343,12 +366,23 @@ export default function ImportData() {
           <CheckCircle size={56} style={{ color: 'var(--accent-500)', marginBottom: 16 }} />
           <h2>Import Completed & Saved to Supabase!</h2>
           <p className="text-muted" style={{ marginBottom: 24 }}>
-            Successfully processed {importedSummary?.totalSheets} sheets and inserted {importedSummary?.totalRecords} records directly into your Supabase database.
+            Successfully processed {importedSummary?.totalSheets} sheet(s) and inserted <strong>{importedSummary?.totalRecords}</strong> total record(s) directly into your Supabase database:
           </p>
+
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 28, flexWrap: 'wrap' }}>
+            <div className="card" style={{ padding: '12px 20px', minWidth: 140 }}>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--primary-400)' }}>{importedSummary?.students || 0}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Students Added</div>
+            </div>
+            <div className="card" style={{ padding: '12px 20px', minWidth: 140 }}>
+              <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--accent-400)' }}>{importedSummary?.fees || 0}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Fee Records Added</div>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button className="btn btn-secondary" onClick={() => navigate('/students')}>View Students</button>
-            <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>Go to Dashboard</button>
+            <button className="btn btn-primary" onClick={() => navigate('/fees')}>View Fee Records</button>
           </div>
         </div>
       )}
