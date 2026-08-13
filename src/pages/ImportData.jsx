@@ -619,11 +619,19 @@ export default function ImportData() {
             }
           });
 
-          // Step D: Batch insert attendance records into Supabase with 3-tier constraint fallback
+          // Step D: Batch insert attendance records into Supabase with deduplication and 3-tier fallback
           if (attendanceRecords.length > 0 && supabase.from) {
+            // Deduplicate by (student_id + date) first
+            const uniqueMap = new Map();
+            attendanceRecords.forEach(r => {
+              const key = `${r.student_id}_${r.date}`;
+              uniqueMap.set(key, r);
+            });
+            const dedupedRecords = Array.from(uniqueMap.values());
+
             const BATCH_SIZE = 500;
-            for (let i = 0; i < attendanceRecords.length; i += BATCH_SIZE) {
-              const batch = attendanceRecords.slice(i, i + BATCH_SIZE);
+            for (let i = 0; i < dedupedRecords.length; i += BATCH_SIZE) {
+              const batch = dedupedRecords.slice(i, i + BATCH_SIZE);
 
               // Attempt 1: Upsert with (student_id, date) composite constraint (Ideal schema)
               let { error } = await supabase.from('attendance').upsert(batch, { onConflict: 'student_id,date' });
@@ -634,15 +642,19 @@ export default function ImportData() {
                 error = insertErr;
               }
 
-              // Attempt 3: If primary key constraint error on student_id (23505/attendance_pkey), fallback to upsert on student_id
+              // Attempt 3: If primary key constraint error on student_id (23505/attendance_pkey), deduplicate per student and fallback to student_id upsert
               if (error && (error.code === '23505' || error.message.includes('attendance_pkey') || error.message.includes('duplicate key'))) {
-                let { error: upsertErr } = await supabase.from('attendance').upsert(batch, { onConflict: 'student_id' });
+                const singleStudentMap = new Map();
+                batch.forEach(r => singleStudentMap.set(r.student_id, r));
+                const singleStudentBatch = Array.from(singleStudentMap.values());
+
+                let { error: upsertErr } = await supabase.from('attendance').upsert(singleStudentBatch, { onConflict: 'student_id' });
                 error = upsertErr;
               }
 
               if (error) throw new Error(`Failed to insert attendance into database: ${error.message}`);
             }
-            totalAttendanceImported += attendanceRecords.length;
+            totalAttendanceImported += dedupedRecords.length;
           }
         }
 
