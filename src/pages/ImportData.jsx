@@ -34,6 +34,200 @@ export default function ImportData() {
     return sheetName.trim();
   };
 
+  const inferMonthAndYear = (sheetName) => {
+    const lower = sheetName.toLowerCase();
+    let foundMonth = null;
+    for (const [mName, mNum] of Object.entries(MONTH_MAP)) {
+      if (lower.includes(mName)) {
+        foundMonth = mNum;
+        break;
+      }
+    }
+    const yearMatch = lower.match(/20\d{2}/);
+    const foundYear = yearMatch ? parseInt(yearMatch[0], 10) : 2025;
+    return { month: foundMonth || 4, year: foundYear }; // default to April 2025 if unspecified
+  };
+
+  const parseDateFromColumn = (colKey, sheetName) => {
+    if (colKey === undefined || colKey === null) return null;
+    const str = String(colKey).trim();
+    if (!str) return null;
+
+    const lower = str.toLowerCase();
+    const nonDateKeys = [
+      'name', 'student name', 'student', 'fullname', 'full name', 'name of student',
+      'roll', 'roll no', 'rollno', 'roll_number', 'roll number', 'id', 's.no', 'sr', 'sr.no', 'sr #', 'r.no',
+      'class', 'grade', 'standard', 'sec', 'section',
+      'father', 'father name', 'father\'s name', 'father_name', 'guardian',
+      'total', 'total present', 'total absent', 'total leave', 'present', 'absent', 'leave',
+      '%', 'percentage', 'remarks', 'status', 'card', 'card issued'
+    ];
+    if (nonDateKeys.some(k => lower === k || lower.startsWith(k))) return null;
+
+    // 1. Excel Serial Number (e.g. 45000 to 46000)
+    if (!isNaN(Number(str)) && Number(str) > 30000 && Number(str) < 60000) {
+      const num = Number(str);
+      const date = new Date((num - (25567 + 2)) * 86400 * 1000);
+      return date.toISOString().split('T')[0];
+    }
+
+    // 2. Format YYYY-MM-DD
+    if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str;
+
+    // 3. Format DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[-/.]([0-1]?\d)[-/.](20\d{2}|\d{2})$/);
+    if (dmyMatch) {
+      let d = parseInt(dmyMatch[1], 10);
+      let m = parseInt(dmyMatch[2], 10);
+      let y = parseInt(dmyMatch[3], 10);
+      if (y < 100) y += 2000;
+
+      if (m > 12 && d <= 12) {
+        const temp = d; d = m; m = temp;
+      }
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+    }
+
+    // 4. Format YYYY/MM/DD
+    const ymdMatch = str.match(/^(20\d{2})[-/.]([0-1]?\d)[-/.]([0-3]?\d)$/);
+    if (ymdMatch) {
+      const y = ymdMatch[1];
+      const m = String(parseInt(ymdMatch[2], 10)).padStart(2, '0');
+      const d = String(parseInt(ymdMatch[3], 10)).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    // 5. Day number only like "1", "01", "31"
+    if (str.match(/^\d{1,2}$/)) {
+      const day = parseInt(str, 10);
+      if (day >= 1 && day <= 31) {
+        const { month, year } = inferMonthAndYear(sheetName);
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${year}-${mm}-${dd}`;
+      }
+    }
+
+    // 6. Formats with month names: "01-Apr-2025", "1 Apr", "Apr 1", "01/Apr", "Apr-01"
+    const mMatch = str.match(/^(\d{1,2})[-/\s]([a-zA-Z]{3,9})(?:[-/\s](20\d{2}|\d{2}))?$/) || 
+                   str.match(/^([a-zA-Z]{3,9})[-/\s](\d{1,2})(?:[-/\s](20\d{2}|\d{2}))?$/);
+    if (mMatch) {
+      let day, mStr, yearStr;
+      if (!isNaN(Number(mMatch[1]))) {
+        day = parseInt(mMatch[1], 10);
+        mStr = mMatch[2].toLowerCase();
+        yearStr = mMatch[3];
+      } else {
+        mStr = mMatch[1].toLowerCase();
+        day = parseInt(mMatch[2], 10);
+        yearStr = mMatch[3];
+      }
+      const mNum = MONTH_MAP[mStr] || MONTH_MAP[mStr.slice(0, 3)];
+      if (mNum && day >= 1 && day <= 31) {
+        let year = yearStr ? parseInt(yearStr, 10) : inferMonthAndYear(sheetName).year;
+        if (year < 100) year += 2000;
+        const mm = String(mNum).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${year}-${mm}-${dd}`;
+      }
+    }
+
+    return null;
+  };
+
+  const cleanStatus = (val) => {
+    if (val === undefined || val === null) return null;
+    const s = String(val).trim().toLowerCase();
+    if (!s || s === '-' || s === 'n/a' || s === 'null' || s === 'off' || s === 'sunday' || s === 'holiday') return null;
+
+    if (['p', 'present', '1', 'true', 'yes', 'y', '✓', '✔', 'v', 'pr', 'pre'].includes(s) || s.startsWith('p')) {
+      return 'Present';
+    }
+    if (['a', 'absent', '0', 'false', 'no', 'n', 'x', '✗', 'ab', 'abs'].includes(s) || s.startsWith('a')) {
+      return 'Absent';
+    }
+    if (['l', 'leave', 'lev', 'lea', 'sl', 'cl', 'r'].includes(s) || s.startsWith('l')) {
+      return 'Leave';
+    }
+    return null;
+  };
+
+  // Helper to safely get value from object regardless of column header case, colons, or punctuation
+  const getCol = (row, ...colNames) => {
+    const keys = Object.keys(row);
+    for (const name of colNames) {
+      const match = keys.find(k => {
+        const cleanK = k.replace(/[:_]/g, ' ').toLowerCase().trim();
+        const cleanName = name.replace(/[:_]/g, ' ').toLowerCase().trim();
+        return cleanK === cleanName || cleanK.includes(cleanName);
+      });
+      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== '') {
+        return String(row[match]).trim();
+      }
+    }
+    return '';
+  };
+
+  // Safe Excel date formatter for Postgres DATE fields
+  const formatDate = (val) => {
+    if (!val) return new Date().toISOString().split('T')[0];
+    if (typeof val === 'number' || !isNaN(Number(val))) {
+      const num = Number(val);
+      if (num > 30000 && num < 60000) {
+        const date = new Date((num - (25567 + 2)) * 86400 * 1000);
+        return date.toISOString().split('T')[0];
+      }
+    }
+    const str = String(val).trim();
+    if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str;
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const parseSheetToRows = (worksheet) => {
+    const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    if (!matrix || matrix.length === 0) return [];
+
+    // Find header row in first 15 rows
+    let headerRowIdx = -1;
+
+    for (let r = 0; r < Math.min(15, matrix.length); r++) {
+      const row = matrix[r];
+      if (!row || !Array.isArray(row)) continue;
+
+      const rowText = row.map(cell => String(cell).toLowerCase().trim()).join(' ');
+      
+      const hasNameOrStudent = rowText.includes('name') || rowText.includes('student') || rowText.includes('roll') || rowText.includes('s.no') || rowText.includes('sr');
+      const hasDates = row.some(cell => parseDateFromColumn(cell, ''));
+      const hasClass = rowText.includes('class') || rowText.includes('grade');
+
+      if (hasNameOrStudent || (hasDates && row.length > 2) || hasClass) {
+        headerRowIdx = r;
+        break;
+      }
+    }
+
+    if (headerRowIdx === -1) {
+      headerRowIdx = matrix.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2);
+      if (headerRowIdx === -1) headerRowIdx = 0;
+    }
+
+    const headers = matrix[headerRowIdx].map(h => String(h).trim());
+    const dataRows = matrix.slice(headerRowIdx + 1);
+
+    return dataRows.map(r => {
+      const obj = {};
+      headers.forEach((h, colIdx) => {
+        const key = h || `__col_${colIdx + 1}`;
+        obj[key] = r[colIdx] !== undefined ? String(r[colIdx]).trim() : '';
+      });
+      return obj;
+    });
+  };
+
   const handleFileUpload = (file) => {
     if (!file) return;
     setFileName(file.name);
@@ -46,8 +240,8 @@ export default function ImportData() {
         
         const sheetList = workbook.SheetNames.map(name => {
           const worksheet = workbook.Sheets[name];
-          const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-          return { name, rows: json.length, rawData: json, sample: json.slice(0, 2) };
+          const rows = parseSheetToRows(worksheet);
+          return { name, rows: rows.length, rawData: rows, sample: rows.slice(0, 2) };
         });
 
         setSheets(sheetList);
@@ -85,134 +279,6 @@ export default function ImportData() {
     }
   };
 
-  // Helper to safely get value from object regardless of column header case, colons, or punctuation
-  const getCol = (row, ...colNames) => {
-    const keys = Object.keys(row);
-    for (const name of colNames) {
-      const match = keys.find(k => {
-        const cleanK = k.replace(/[:_]/g, ' ').toLowerCase().trim();
-        const cleanName = name.replace(/[:_]/g, ' ').toLowerCase().trim();
-        return cleanK === cleanName || cleanK.includes(cleanName);
-      });
-      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== '') {
-        return String(row[match]).trim();
-      }
-    }
-    return '';
-  };
-
-  // Safe Excel date formatter for Postgres DATE fields
-  const formatDate = (val) => {
-    if (!val) return new Date().toISOString().split('T')[0];
-    if (typeof val === 'number' || !isNaN(Number(val))) {
-      const num = Number(val);
-      if (num > 30000 && num < 60000) {
-        const date = new Date((num - (25567 + 2)) * 86400 * 1000);
-        return date.toISOString().split('T')[0];
-      }
-    }
-    const str = String(val).trim();
-    if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str;
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
-    return new Date().toISOString().split('T')[0];
-  };
-
-  const inferMonthAndYear = (sheetName) => {
-    const lower = sheetName.toLowerCase();
-    let foundMonth = null;
-    for (const [mName, mNum] of Object.entries(MONTH_MAP)) {
-      if (lower.includes(mName)) {
-        foundMonth = mNum;
-        break;
-      }
-    }
-    const yearMatch = lower.match(/20\d{2}/);
-    const foundYear = yearMatch ? parseInt(yearMatch[0], 10) : 2025;
-    return { month: foundMonth || 4, year: foundYear }; // default to April 2025 if unspecified
-  };
-
-  const parseDateFromColumn = (colKey, sheetName) => {
-    const str = String(colKey).trim();
-    if (!str) return null;
-
-    const lower = str.toLowerCase();
-    const nonDateKeys = ['name', 'student name', 'student', 'fullname', 'full name', 'roll', 'roll no', 'rollno', 'roll_number', 'roll number', 'id', 's.no', 'sr', 'class', 'grade', 'standard', 'father', 'father name', 'father\'s name', 'father_name', 'total', 'present', 'absent', 'leave', '%', 'percentage', 'remarks', 'status'];
-    if (nonDateKeys.includes(lower)) return null;
-
-    // Excel Serial Number (e.g. 45000)
-    if (!isNaN(Number(str)) && Number(str) > 30000 && Number(str) < 60000) {
-      const num = Number(str);
-      const date = new Date((num - (25567 + 2)) * 86400 * 1000);
-      return date.toISOString().split('T')[0];
-    }
-
-    // Standard YYYY-MM-DD
-    if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str;
-
-    // Day number only like "1", "01", "31"
-    if (str.match(/^\d{1,2}$/)) {
-      const day = parseInt(str, 10);
-      if (day >= 1 && day <= 31) {
-        const { month, year } = inferMonthAndYear(sheetName);
-        const mm = String(month).padStart(2, '0');
-        const dd = String(day).padStart(2, '0');
-        return `${year}-${mm}-${dd}`;
-      }
-    }
-
-    // Formats like "01-Apr", "1-Apr-2025", "Apr 1", "01/04/2025", "4/1/2025"
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) {
-      let y = parsed.getFullYear();
-      if (y < 2000) {
-        const { year } = inferMonthAndYear(sheetName);
-        y = year;
-        parsed.setFullYear(y);
-      }
-      return parsed.toISOString().split('T')[0];
-    }
-
-    // Regex for "01 Apr" or "Apr 01" or "01/04"
-    const dmMatch = str.match(/^(\d{1,2})[-/\s]([a-zA-Z]{3,9})$/) || str.match(/^([a-zA-Z]{3,9})[-/\s](\d{1,2})$/);
-    if (dmMatch) {
-      let day, mStr;
-      if (!isNaN(Number(dmMatch[1]))) {
-        day = parseInt(dmMatch[1], 10);
-        mStr = dmMatch[2].toLowerCase();
-      } else {
-        mStr = dmMatch[1].toLowerCase();
-        day = parseInt(dmMatch[2], 10);
-      }
-      const mNum = MONTH_MAP[mStr] || MONTH_MAP[mStr.slice(0, 3)];
-      if (mNum && day >= 1 && day <= 31) {
-        const { year } = inferMonthAndYear(sheetName);
-        const mm = String(mNum).padStart(2, '0');
-        const dd = String(day).padStart(2, '0');
-        return `${year}-${mm}-${dd}`;
-      }
-    }
-
-    return null;
-  };
-
-  const cleanStatus = (val) => {
-    if (val === undefined || val === null) return null;
-    const s = String(val).trim().toLowerCase();
-    if (!s || s === '-' || s === 'n/a' || s === 'null' || s === 'off' || s === 'sunday' || s === 'holiday') return null;
-
-    if (['p', 'present', '1', 'true', 'yes', 'y', '✓', 'v', 'pr', 'pre'].includes(s) || s.startsWith('p')) {
-      return 'Present';
-    }
-    if (['a', 'absent', '0', 'false', 'no', 'n', 'x', '✗', 'ab', 'abs'].includes(s) || s.startsWith('a')) {
-      return 'Absent';
-    }
-    if (['l', 'leave', 'lev', 'lea', 'sl', 'cl'].includes(s) || s.startsWith('l')) {
-      return 'Leave';
-    }
-    return null;
-  };
-
   const handleStartImport = async () => {
     setImporting(true);
     setStep(3);
@@ -238,16 +304,27 @@ export default function ImportData() {
         const moduleType = mapping[sheetObj.name];
         const raw = sheetObj.rawData;
 
-        // Filter out empty rows, header rows, or merged section title rows
-        const validRows = raw.filter(r => {
-          const stName = getCol(r, 'name', 'student name', 'fullname', 'full name', 'student');
-          if (!stName) return false;
-          const lower = stName.toLowerCase();
-          if (lower.includes('name:') || lower.includes('father') || lower.startsWith('class') || lower.startsWith('roll')) return false;
-          return stName.trim().length > 1;
-        });
-
         const currentSectionClass = inferClassFromSheetName(sheetObj.name);
+
+        // Filter out empty rows, title header rows, or summary footer rows
+        const validRows = raw.filter(r => {
+          const keys = Object.keys(r);
+          const hasAnyCell = keys.some(k => r[k] && String(r[k]).trim().length > 0);
+          if (!hasAnyCell) return false;
+
+          const stName = getCol(r, 'name', 'student name', 'student', 'fullname', 'full name', 'naam');
+          if (stName) {
+            const lower = stName.toLowerCase();
+            if (lower.includes('name:') || lower.includes('father') || lower.startsWith('class') || lower.startsWith('roll') || lower.includes('total')) return false;
+            return stName.trim().length > 1;
+          }
+
+          // Fallback check if row has student-like non-numeric cell
+          return keys.some(k => {
+            const v = String(r[k]).trim();
+            return v.length > 2 && !v.match(/^\d+$/) && !parseDateFromColumn(k, sheetObj.name) && !v.toLowerCase().includes('total');
+          });
+        });
 
         // 1. Process Students
         if (moduleType === 'Students' || moduleType === 'Students & Fees') {
@@ -361,13 +438,13 @@ export default function ImportData() {
           }
         }
 
-        // 4. Process Attendance (Supports separated Class tabs + Matrix & Daily Logs)
+        // 4. Process Attendance (Supports separated Class tabs + Matrix & Daily Logs + Auto-creates missing students)
         if (moduleType === 'Attendance') {
           let studentMap = {};
           let studentClassMap = {};
           if (supabase.from) {
             const { data: existingStudents } = await supabase.from('students').select('id, name, roll_number, class');
-            if (existingStudents) {
+            if (existingStudents && existingStudents.length > 0) {
               existingStudents.forEach(st => {
                 if (st.name) {
                   const nKey = st.name.trim().toLowerCase();
@@ -384,12 +461,28 @@ export default function ImportData() {
           }
 
           const attendanceRecords = [];
+          const newStudentsToCreate = new Map();
 
-          validRows.forEach(row => {
-            const stName = getCol(row, 'name', 'student name', 'student', 'fullname', 'full name');
-            if (!stName) return;
-            const stRoll = getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr');
+          validRows.forEach((row, rowIdx) => {
+            let stName = getCol(row, 'name', 'student name', 'student', 'fullname', 'full name', 'naam', 'student_name');
+            const stRoll = getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr', 'r.no');
             
+            // If getCol didn't find name, pick the first non-numeric string key that isn't a date
+            if (!stName) {
+              const keys = Object.keys(row);
+              for (const k of keys) {
+                if (!parseDateFromColumn(k, sheetObj.name)) {
+                  const v = String(row[k]).trim();
+                  if (v && v.length > 1 && !v.match(/^\d+$/) && !v.toLowerCase().includes('class') && !v.toLowerCase().includes('total')) {
+                    stName = v;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (!stName) return;
+
             const nKey = stName.trim().toLowerCase();
             const rKey = stRoll ? stRoll.trim().toLowerCase() : '';
 
@@ -398,7 +491,17 @@ export default function ImportData() {
             const rowClass = getCol(row, 'class', 'grade', 'standard');
             const finalClass = dbClass || rowClass || currentSectionClass;
 
-            const studentId = studentMap[nKey] || (rKey ? studentMap[rKey] : null) || null;
+            let studentId = studentMap[nKey] || (rKey ? studentMap[rKey] : null) || null;
+
+            // Track missing students to auto-create them in 'students' table
+            if (!studentId && !newStudentsToCreate.has(nKey)) {
+              newStudentsToCreate.set(nKey, {
+                roll_number: stRoll || `R-${100 + rowIdx + 1}`,
+                name: stName.trim(),
+                class: finalClass,
+                status: 'Active'
+              });
+            }
 
             // Check if vertical format (explicit Date and Status columns)
             const explicitDateCol = getCol(row, 'date', 'attendance date', 'day');
@@ -408,7 +511,7 @@ export default function ImportData() {
               const status = cleanStatus(explicitStatusCol) || 'Present';
               attendanceRecords.push({
                 student_id: studentId,
-                student_name: stName,
+                student_name: stName.trim(),
                 class: finalClass,
                 date: formatDate(explicitDateCol),
                 status: status
@@ -422,7 +525,7 @@ export default function ImportData() {
                   if (status) {
                     attendanceRecords.push({
                       student_id: studentId,
-                      student_name: stName,
+                      student_name: stName.trim(),
                       class: finalClass,
                       date: resolvedDate,
                       status: status
@@ -432,6 +535,25 @@ export default function ImportData() {
               });
             }
           });
+
+          // Auto-insert any missing students first so we get their real UUID IDs!
+          if (newStudentsToCreate.size > 0 && supabase.from) {
+            const studentArray = Array.from(newStudentsToCreate.values());
+            const { data: createdStudents, error: stErr } = await supabase.from('students').insert(studentArray).select();
+            if (!stErr && createdStudents) {
+              createdStudents.forEach(st => {
+                const nK = st.name.trim().toLowerCase();
+                studentMap[nK] = st.id;
+              });
+              // Update student_id on attendance records
+              attendanceRecords.forEach(att => {
+                if (!att.student_id && att.student_name) {
+                  att.student_id = studentMap[att.student_name.trim().toLowerCase()] || null;
+                }
+              });
+              totalStudentsImported += createdStudents.length;
+            }
+          }
 
           if (attendanceRecords.length > 0 && supabase.from) {
             // Batch insert in chunks of 500
@@ -531,7 +653,7 @@ export default function ImportData() {
                       )}
                     </div>
                   </div>
-                  <div className="sheet-rows text-muted text-sm">{s.rows} Rows</div>
+                  <div className="sheet-rows text-muted text-sm">{s.rows} Rows Detected</div>
                   <select
                     className="form-select"
                     style={{ width: 250 }}
@@ -583,7 +705,7 @@ export default function ImportData() {
             {importedSummary?.students > 0 && (
               <div className="card" style={{ padding: '12px 20px', minWidth: 140 }}>
                 <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--primary-400)' }}>{importedSummary?.students}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Students Added</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Students Created</div>
               </div>
             )}
             {importedSummary?.attendance > 0 && (
