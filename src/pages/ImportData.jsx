@@ -140,15 +140,15 @@ export default function ImportData() {
   const cleanStatus = (val) => {
     if (val === undefined || val === null) return null;
     const s = String(val).trim().toLowerCase();
-    if (!s || s === '-' || s === 'n/a' || s === 'null' || s === 'off' || s === 'sunday' || s === 'holiday') return null;
+    if (!s || s === '-' || s === 'n/a' || s === 'null' || s === 'off' || s === 'sunday' || s === 'holiday' || s === 'majlis' || s === 'cancelled') return null;
 
-    if (['p', 'present', '1', 'true', 'yes', 'y', '✓', '✔', 'v', 'pr', 'pre'].includes(s) || s.startsWith('p')) {
+    if (['p', '-p', 'present', '1', 'true', 'yes', 'y', '✓', '✔', 'v', 'pr', 'pre'].includes(s) || s.startsWith('p') || s === '-p') {
       return 'Present';
     }
-    if (['a', 'absent', '0', 'false', 'no', 'n', 'x', '✗', 'ab', 'abs'].includes(s) || s.startsWith('a')) {
+    if (['a', '-a', 'absent', '0', 'false', 'no', 'n', 'x', '✗', 'ab', 'abs'].includes(s) || s.startsWith('a') || s === '-a') {
       return 'Absent';
     }
-    if (['l', 'leave', 'lev', 'lea', 'sl', 'cl', 'r'].includes(s) || s.startsWith('l')) {
+    if (['l', 'leave', 'lev', 'lea', 'sl', 'cl', 'r', 'lt', 'late'].includes(s) || s.startsWith('l') || s.startsWith('lt')) {
       return 'Leave';
     }
     return null;
@@ -619,12 +619,27 @@ export default function ImportData() {
             }
           });
 
-          // Step D: Batch insert attendance records into Supabase
+          // Step D: Batch insert attendance records into Supabase with 3-tier constraint fallback
           if (attendanceRecords.length > 0 && supabase.from) {
             const BATCH_SIZE = 500;
             for (let i = 0; i < attendanceRecords.length; i += BATCH_SIZE) {
               const batch = attendanceRecords.slice(i, i + BATCH_SIZE);
-              const { error } = await supabase.from('attendance').insert(batch);
+
+              // Attempt 1: Upsert with (student_id, date) composite constraint (Ideal schema)
+              let { error } = await supabase.from('attendance').upsert(batch, { onConflict: 'student_id,date' });
+
+              // Attempt 2: If no composite constraint (42P10), try standard insert
+              if (error && (error.code === '42P10' || error.message.includes('ON CONFLICT'))) {
+                let { error: insertErr } = await supabase.from('attendance').insert(batch);
+                error = insertErr;
+              }
+
+              // Attempt 3: If primary key constraint error on student_id (23505/attendance_pkey), fallback to upsert on student_id
+              if (error && (error.code === '23505' || error.message.includes('attendance_pkey') || error.message.includes('duplicate key'))) {
+                let { error: upsertErr } = await supabase.from('attendance').upsert(batch, { onConflict: 'student_id' });
+                error = upsertErr;
+              }
+
               if (error) throw new Error(`Failed to insert attendance into database: ${error.message}`);
             }
             totalAttendanceImported += attendanceRecords.length;
