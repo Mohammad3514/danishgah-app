@@ -502,31 +502,44 @@ export default function ImportData() {
 
             let existingId = studentMap[rawKey] || (cKey ? studentMap[cKey] : null) || (rKey ? studentMap[rKey] : null);
 
-            // If student doesn't exist in 'students' table yet, create them now!
+            // If student doesn't exist in 'students' table yet, query DB or create them now!
             if (!existingId && supabase.from) {
               const rowClass = getCol(row, 'class', 'grade', 'standard');
               const finalClass = rowClass || currentSectionClass;
-              const generatedRoll = stRoll || `R-${1000 + rowIdx + 1}-${Date.now().toString().slice(-4)}`;
 
-              const newStObj = {
-                name: stName.trim(),
-                roll_number: generatedRoll,
-                class: finalClass,
-                status: 'Active'
-              };
+              // 1. Try querying DB by student name first
+              try {
+                const { data: foundSt } = await supabase.from('students').select('id').ilike('name', stName.trim()).limit(1);
+                if (foundSt && foundSt.length > 0 && foundSt[0].id) {
+                  existingId = foundSt[0].id;
+                }
+              } catch (err) {
+                // Ignore query error, proceed to insert
+              }
 
-              const { data: createdSt, error: createErr } = await supabase.from('students').insert([newStObj]).select('id').single();
+              // 2. If still not found, insert student into 'students' table
+              if (!existingId) {
+                const generatedRoll = stRoll || `R-${1000 + rowIdx + 1}-${Date.now().toString().slice(-4)}`;
+                const newStObj = {
+                  name: stName.trim(),
+                  roll_number: generatedRoll,
+                  class: finalClass,
+                  status: 'Active'
+                };
 
-              if (!createErr && createdSt && createdSt.id) {
-                existingId = createdSt.id;
-                totalStudentsImported++;
-              } else {
-                // Retry insertion with ultra-unique roll number if duplicate roll number error occurred
-                const retryRoll = `R-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-                const { data: retrySt } = await supabase.from('students').insert([{ ...newStObj, roll_number: retryRoll }]).select('id').single();
-                if (retrySt && retrySt.id) {
-                  existingId = retrySt.id;
+                const { data: createdArr, error: createErr } = await supabase.from('students').insert([newStObj]).select('id');
+
+                if (!createErr && createdArr && createdArr.length > 0 && createdArr[0].id) {
+                  existingId = createdArr[0].id;
                   totalStudentsImported++;
+                } else {
+                  // Retry with timestamp roll number
+                  const retryRoll = `R-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+                  const { data: retryArr } = await supabase.from('students').insert([{ ...newStObj, roll_number: retryRoll }]).select('id');
+                  if (retryArr && retryArr.length > 0 && retryArr[0].id) {
+                    existingId = retryArr[0].id;
+                    totalStudentsImported++;
+                  }
                 }
               }
 
