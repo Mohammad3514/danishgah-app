@@ -56,9 +56,9 @@ export default function Attendance() {
         let filteredStudents = stData || [];
         if (selectedClass !== 'All Classes' && filteredStudents.length > 0) {
           filteredStudents = filteredStudents.filter(s => {
-            if (!s.class) return false;
-            const c1 = s.class.toLowerCase();
-            const c2 = selectedClass.toLowerCase();
+            if (!s.class) return true;
+            const c1 = s.class.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const c2 = selectedClass.toLowerCase().replace(/[^a-z0-9]/g, '');
             return c1 === c2 || c1.includes(c2) || c2.includes(c1);
           });
         }
@@ -78,8 +78,11 @@ export default function Attendance() {
         // Fetch monthly attendance for Matrix
         if (selectedMonth) {
           const [year, month] = selectedMonth.split('-');
+          const yNum = parseInt(year || '2026', 10);
+          const mNum = parseInt(month || '4', 10);
+          const lastDay = new Date(yNum, mNum, 0).getDate();
           const startDate = `${year}-${month}-01`;
-          const endDate = `${year}-${month}-31`;
+          const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
           const { data: mData } = await supabase.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
           if (mData) setMonthlyRecords(mData);
         }

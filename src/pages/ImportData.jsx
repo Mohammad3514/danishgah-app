@@ -25,12 +25,12 @@ export default function ImportData() {
 
   const inferClassFromSheetName = (sheetName) => {
     const lower = sheetName.toLowerCase();
-    if (lower.includes('muntazir') || lower.includes('3-4') || lower.includes('class 3') || lower.includes('class 4')) return 'Muntazir (3-4)';
-    if (lower.includes('muntaqim') || lower.includes('class 5') || lower.includes('5th')) return 'Muntaqim (5)';
-    if (lower.includes('zaman') || lower.includes('class 6') || lower.includes('6th')) return 'Zaman (6)';
-    if (lower.includes('qaim') || lower.includes('7-8') || lower.includes('class 7') || lower.includes('class 8')) return 'Qaim (7-8)';
-    if (lower.includes('hujjat') || lower.includes('9-10') || lower.includes('class 9') || lower.includes('class 10')) return 'Hujjat (9-10)';
-    if (lower.includes('senior')) return 'Senior Class';
+    if (lower.includes('muntazir')) return 'Muntazir';
+    if (lower.includes('muntaqim')) return 'Muntaqim';
+    if (lower.includes('zaman')) return 'Zaman';
+    if (lower.includes('qaim')) return 'Qaim';
+    if (lower.includes('hujjat')) return 'Hujjat';
+    if (lower.includes('senior') || lower.includes('mir')) return 'Senior Class';
     return sheetName.trim();
   };
 
