@@ -438,18 +438,33 @@ export default function ImportData() {
           }
         }
 
-        // 4. Process Attendance (Supports separated Class tabs + Matrix & Daily Logs + Auto-creates missing students)
+        // 4. Process Attendance (Guarantees non-null student_id UUID foreign key from students table)
         if (moduleType === 'Attendance') {
           let studentMap = {};
           let studentClassMap = {};
+
+          const cleanNameKey = (str) => {
+            if (!str) return '';
+            return str.toLowerCase()
+              .replace(/^(syed|muhammad|md|m\.|mr\.)\s+/g, '')
+              .replace(/[^a-z0-9]/g, '')
+              .trim();
+          };
+
+          // Step A: Load existing students from database
           if (supabase.from) {
             const { data: existingStudents } = await supabase.from('students').select('id, name, roll_number, class');
             if (existingStudents && existingStudents.length > 0) {
               existingStudents.forEach(st => {
                 if (st.name) {
-                  const nKey = st.name.trim().toLowerCase();
-                  studentMap[nKey] = st.id;
-                  if (st.class) studentClassMap[nKey] = st.class;
+                  const rawKey = st.name.trim().toLowerCase();
+                  const cKey = cleanNameKey(st.name);
+                  studentMap[rawKey] = st.id;
+                  if (cKey) studentMap[cKey] = st.id;
+                  if (st.class) {
+                    studentClassMap[rawKey] = st.class;
+                    if (cKey) studentClassMap[cKey] = st.class;
+                  }
                 }
                 if (st.roll_number) {
                   const rKey = st.roll_number.trim().toLowerCase();
@@ -460,14 +475,76 @@ export default function ImportData() {
             }
           }
 
-          const attendanceRecords = [];
-          const newStudentsToCreate = new Map();
-
-          validRows.forEach((row, rowIdx) => {
+          // Step B: Pre-process students in sheet & auto-create missing students in 'students' table first
+          for (let rowIdx = 0; rowIdx < validRows.length; rowIdx++) {
+            const row = validRows[rowIdx];
             let stName = getCol(row, 'name', 'student name', 'student', 'fullname', 'full name', 'naam', 'student_name');
             const stRoll = getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr', 'r.no');
-            
-            // If getCol didn't find name, pick the first non-numeric string key that isn't a date
+
+            if (!stName) {
+              const keys = Object.keys(row);
+              for (const k of keys) {
+                if (!parseDateFromColumn(k, sheetObj.name)) {
+                  const v = String(row[k]).trim();
+                  if (v && v.length > 1 && !v.match(/^\d+$/) && !v.toLowerCase().includes('class') && !v.toLowerCase().includes('total')) {
+                    stName = v;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (!stName) continue;
+
+            const rawKey = stName.trim().toLowerCase();
+            const cKey = cleanNameKey(stName);
+            const rKey = stRoll ? stRoll.trim().toLowerCase() : '';
+
+            let existingId = studentMap[rawKey] || (cKey ? studentMap[cKey] : null) || (rKey ? studentMap[rKey] : null);
+
+            // If student doesn't exist in 'students' table yet, create them now!
+            if (!existingId && supabase.from) {
+              const rowClass = getCol(row, 'class', 'grade', 'standard');
+              const finalClass = rowClass || currentSectionClass;
+              const generatedRoll = stRoll || `R-${1000 + rowIdx + 1}-${Date.now().toString().slice(-4)}`;
+
+              const newStObj = {
+                name: stName.trim(),
+                roll_number: generatedRoll,
+                class: finalClass,
+                status: 'Active'
+              };
+
+              const { data: createdSt, error: createErr } = await supabase.from('students').insert([newStObj]).select('id').single();
+
+              if (!createErr && createdSt && createdSt.id) {
+                existingId = createdSt.id;
+                totalStudentsImported++;
+              } else {
+                // Retry insertion with ultra-unique roll number if duplicate roll number error occurred
+                const retryRoll = `R-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                const { data: retrySt } = await supabase.from('students').insert([{ ...newStObj, roll_number: retryRoll }]).select('id').single();
+                if (retrySt && retrySt.id) {
+                  existingId = retrySt.id;
+                  totalStudentsImported++;
+                }
+              }
+
+              if (existingId) {
+                studentMap[rawKey] = existingId;
+                if (cKey) studentMap[cKey] = existingId;
+                studentClassMap[rawKey] = finalClass;
+              }
+            }
+          }
+
+          // Step C: Build attendance records with guaranteed valid student_id UUIDs
+          const attendanceRecords = [];
+
+          validRows.forEach((row) => {
+            let stName = getCol(row, 'name', 'student name', 'student', 'fullname', 'full name', 'naam', 'student_name');
+            const stRoll = getCol(row, 'roll_number', 'roll no', 'rollno', 'roll number', 'id', 's.no', 'sr', 'r.no');
+
             if (!stName) {
               const keys = Object.keys(row);
               for (const k of keys) {
@@ -483,25 +560,18 @@ export default function ImportData() {
 
             if (!stName) return;
 
-            const nKey = stName.trim().toLowerCase();
+            const rawKey = stName.trim().toLowerCase();
+            const cKey = cleanNameKey(stName);
             const rKey = stRoll ? stRoll.trim().toLowerCase() : '';
 
-            // Priority: Database student class -> Row 'class' column -> Inferred sheet tab class
-            const dbClass = studentClassMap[nKey] || (rKey ? studentClassMap[rKey] : null);
+            const studentId = studentMap[rawKey] || (cKey ? studentMap[cKey] : null) || (rKey ? studentMap[rKey] : null);
+
+            // Skip if no valid student_id could be created/matched (never violates NOT NULL constraint)
+            if (!studentId) return;
+
+            const dbClass = studentClassMap[rawKey] || (cKey ? studentClassMap[cKey] : null) || (rKey ? studentClassMap[rKey] : null);
             const rowClass = getCol(row, 'class', 'grade', 'standard');
             const finalClass = dbClass || rowClass || currentSectionClass;
-
-            let studentId = studentMap[nKey] || (rKey ? studentMap[rKey] : null) || null;
-
-            // Track missing students to auto-create them in 'students' table
-            if (!studentId && !newStudentsToCreate.has(nKey)) {
-              newStudentsToCreate.set(nKey, {
-                roll_number: stRoll || `R-${100 + rowIdx + 1}`,
-                name: stName.trim(),
-                class: finalClass,
-                status: 'Active'
-              });
-            }
 
             // Check if vertical format (explicit Date and Status columns)
             const explicitDateCol = getCol(row, 'date', 'attendance date', 'day');
@@ -536,27 +606,8 @@ export default function ImportData() {
             }
           });
 
-          // Auto-insert any missing students first so we get their real UUID IDs!
-          if (newStudentsToCreate.size > 0 && supabase.from) {
-            const studentArray = Array.from(newStudentsToCreate.values());
-            const { data: createdStudents, error: stErr } = await supabase.from('students').insert(studentArray).select();
-            if (!stErr && createdStudents) {
-              createdStudents.forEach(st => {
-                const nK = st.name.trim().toLowerCase();
-                studentMap[nK] = st.id;
-              });
-              // Update student_id on attendance records
-              attendanceRecords.forEach(att => {
-                if (!att.student_id && att.student_name) {
-                  att.student_id = studentMap[att.student_name.trim().toLowerCase()] || null;
-                }
-              });
-              totalStudentsImported += createdStudents.length;
-            }
-          }
-
+          // Step D: Batch insert attendance records into Supabase
           if (attendanceRecords.length > 0 && supabase.from) {
-            // Batch insert in chunks of 500
             const BATCH_SIZE = 500;
             for (let i = 0; i < attendanceRecords.length; i += BATCH_SIZE) {
               const batch = attendanceRecords.slice(i, i + BATCH_SIZE);
